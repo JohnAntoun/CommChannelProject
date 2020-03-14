@@ -1,0 +1,6 @@
+#include "zone.h"
+
+Zone::Zone(int zoneType) : zone(zoneType)
+{
+
+}

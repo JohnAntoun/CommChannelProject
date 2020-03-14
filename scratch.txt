@@ -1,0 +1,598 @@
+TEST FUNCTION IMAGEMETHOD2 TO TEST REPORT EXEMPLE (WORKED)
+
+qreal MainWindow::imageMethod2(Mesh TX, Mesh RX, QList<Wall> walls){
+    QPointF R = RX.center(); QPointF T = TX.center();
+    qreal sum=0; // Initialize the sum for total power computation. The 'sum' is the summation where each term
+                // is for one ray. Those terms are the product of total reflection coef and total transmission
+                // coef, divided by square of distance made by the ray (including reflections). 'sum' is updated
+                // as soon as needed information is gathered to compute a new term.
+
+    draw_ray(R,T,0);
+    qreal product = transmission_coef(R,T,walls); // 'product' is the product consisting each term of 'sum'.
+                                                    //Like 'sum', 'product' is updated every time needed
+                                                    //information is gathered to compute a new coef. Note that
+                                                    //it is renewed for each new term of 'sum'.
+    qDebug() << "Trans coef of direct wave" << product;
+    qDebug() << "Distance is " << QLineF(R,T).length()/100;
+
+    sum += pow(product/QLineF(R,T).length()*100,2); // Note '*(100)' is to convert from cm to m units
+    qDebug() << "sum1 : " << sum;
+
+    int a,b;
+    QPointF r0, r1,r2; QLineF line; QVector<QPointF> m_list;
+
+    // first mirror wrt each wall, and one time reflected rays computations
+    for(int i =0; i < walls.size(); i++){
+
+        m_list.insert(0, mirrorPoint(T, walls[i]) );
+        if( IsReflexionOK(T,R,m_list[0],walls[i]) ){
+            line.setP1(R);line.setP2(m_list[0]); line.intersect(walls[i], &r0);
+
+            qDebug() << "On wall " << i << "reflection coef is " << reflexion_coef(T,r0,walls[i]);
+            qDebug() << "   first transmission coef is " << transmission_coef(T,r0,walls);
+            qDebug() << "   second transmission coef is " << transmission_coef(r0,R,walls);
+            qDebug() << "   Total distance is " << QLineF(m_list[0],R).length()/100;
+
+            sum  += pow(reflexion_coef(T,r0,walls[i]) * transmission_coef(T,r0,walls) * transmission_coef(r0,R,walls) / QLineF(m_list[0],R).length()*100 ,2);
+            qDebug() << "sum2 : " << sum;
+            draw_ray(T,r0,1); draw_ray(R,r0,1);
+
+//            // second mirror wrt each wall, and twice reflected rays computations
+//            for (int j =0; j<walls.size(); j++){
+
+//                if(j == i){continue;} // exclude the wall already considered for last mirror point
+//                m_list.insert(1, mirrorPoint(m_list[0], walls[j]));
+//                if( IsReflexionOK(m_list[0],R,m_list[1],walls[j])){
+//                    line.setP1(R);line.setP2(m_list[1]); line.intersect(walls[j], &r1);
+//                    line.setP1(m_list[0]);line.setP2(r1); a = line.intersect(walls[i], &r0); // IMPORTANT 'a == intersect...' statement which gives
+//                                                                                                // 'a' value of one if 'UPDATED r0' belongs to walls[i]
+
+//                    if(a == 1){
+//                        sum += pow( reflexion_coef(R,r1, walls[j]) * transmission_coef(R,r1,walls) *
+//                                       reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls) *
+//                                       transmission_coef(r0,T,walls) / QLineF(m_list[1],R).length()*100 , 2);
+//                        draw_ray(R,r1,2); draw_ray(r1,r0,2); draw_ray(r0,T,2);
+//                    }
+
+//                    // third mirror wrt each wall, and three times reflected rays computations
+//                    for(int k=0; k<walls.size(); k++){
+//                        if(k==j){continue;}
+//                        m_list.insert(2, mirrorPoint(m_list[1], walls[k]));
+//                        if( IsReflexionOK(m_list[1],R,m_list[2],walls[k])){
+//                            line.setP1(R);line.setP2(m_list[2]); line.intersect(walls[k], &r2);
+//                            line.setP1(m_list[1]);line.setP2(r2); a = line.intersect(walls[j], &r1); // IMPORTANT 'a == intersect...'
+//                            line.setP1(m_list[0]);line.setP2(r1); b = line.intersect(walls[i], &r0); // IMPORTANT 'b == intersect...' statements which
+//                                                                                             // give 'a' and 'b' value of one if 'UPDATED r1
+//                                                                                             //and r0' belong respectively to walls[j] and walls[i]
+//                            if(a==1 && b==1){
+//                                sum += pow( reflexion_coef(R,r2, walls[k]) * transmission_coef(R,r2,walls) *
+//                                            reflexion_coef(r2,r1,walls[j]) * transmission_coef(r2,r1,walls)*
+//                                            reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls)*
+//                                            transmission_coef(r0,T,walls) / QLineF(m_list[2],R).length()*100 , 2);
+//                                draw_ray(R,r2,3); draw_ray(r2,r1,3);draw_ray(r1,r0,3);
+//                                draw_ray(r0,T,3);
+//                            }
+//                        }
+//                        else continue;
+//                    }
+//                }
+//                else continue;
+//            }
+        }
+        else continue;
+    }
+
+    return sum;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEST IMAGEMETHOD2 ON REPORT EXEMPLE BUT WITH THREE REFLECTIONS (can check values if need but seems coherent until here)
+
+qreal MainWindow::imageMethod2(Mesh TX, Mesh RX, QList<Wall> walls){
+    QPointF R = RX.center(); QPointF T = TX.center();
+    qreal sum=0; // Initialize the sum for total power computation. The 'sum' is the summation where each term
+                // is for one ray. Those terms are the product of total reflection coef and total transmission
+                // coef, divided by square of distance made by the ray (including reflections). 'sum' is updated
+                // as soon as needed information is gathered to compute a new term.
+
+    draw_ray(R,T,0);
+    qreal product = transmission_coef(R,T,walls); // 'product' is the product consisting each term of 'sum'.
+                                                    //Like 'sum', 'product' is updated every time needed
+                                                    //information is gathered to compute a new coef. Note that
+                                                    //it is renewed for each new term of 'sum'.
+    qDebug() << "Trans coef of direct wave" << product;
+    qDebug() << "Distance is " << QLineF(R,T).length()/100;
+
+    sum += pow(product/QLineF(R,T).length()*100,2); // Note '*(100)' is to convert from cm to m units
+    qDebug() << "sum0 : " << sum;
+
+    int a,b;
+    QPointF r0, r1,r2; QLineF line; QVector<QPointF> m_list;
+
+    // first mirror wrt each wall, and one time reflected rays computations
+    for(int i =0; i < walls.size(); i++){
+
+        m_list.insert(0, mirrorPoint(T, walls[i]) );
+        if( IsReflexionOK(T,R,m_list[0],walls[i]) ){
+            line.setP1(R);line.setP2(m_list[0]); line.intersect(walls[i], &r0);
+
+            qDebug() << "On wall " << i << "reflection coef is " << reflexion_coef(T,r0,walls[i]);
+            qDebug() << "   first transmission coef is " << transmission_coef(T,r0,walls);
+            qDebug() << "   second transmission coef is " << transmission_coef(r0,R,walls);
+            qDebug() << "   Total distance is " << QLineF(m_list[0],R).length()/100;
+
+            sum  += pow(reflexion_coef(T,r0,walls[i]) * transmission_coef(T,r0,walls) * transmission_coef(r0,R,walls) / QLineF(m_list[0],R).length()*100 ,2);
+            qDebug() << "sum1 : " << sum;
+            draw_ray(T,r0,1); draw_ray(R,r0,1);
+
+            // second mirror wrt each wall, and twice reflected rays computations
+            for (int j =0; j<walls.size(); j++){
+
+                if(j == i){continue;} // exclude the wall already considered for last mirror point
+                m_list.insert(1, mirrorPoint(m_list[0], walls[j]));
+                if( IsReflexionOK(m_list[0],R,m_list[1],walls[j])){
+                    line.setP1(R);line.setP2(m_list[1]); line.intersect(walls[j], &r1);
+                    line.setP1(m_list[0]);line.setP2(r1); a = line.intersect(walls[i], &r0); // IMPORTANT 'a == intersect...' statement which gives
+                                                                                                // 'a' value of one if 'UPDATED r0' belongs to walls[i]
+
+                    if(a == 1){
+                        qDebug()<< "sum2 :" << pow( reflexion_coef(R,r1, walls[j]) * transmission_coef(R,r1,walls) *
+                                        reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls) *
+                                        transmission_coef(r0,T,walls) / QLineF(m_list[1],R).length()*100 , 2);
+                        sum += pow( reflexion_coef(R,r1, walls[j]) * transmission_coef(R,r1,walls) *
+                                       reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls) *
+                                       transmission_coef(r0,T,walls) / QLineF(m_list[1],R).length()*100 , 2);
+                        draw_ray(R,r1,2); draw_ray(r1,r0,2); draw_ray(r0,T,2);
+                    }
+
+                    // third mirror wrt each wall, and three times reflected rays computations
+                    for(int k=0; k<walls.size(); k++){
+                        if(k==j){continue;}
+                        m_list.insert(2, mirrorPoint(m_list[1], walls[k]));
+                        if( IsReflexionOK(m_list[1],R,m_list[2],walls[k])){
+                            line.setP1(R);line.setP2(m_list[2]); line.intersect(walls[k], &r2);
+                            line.setP1(m_list[1]);line.setP2(r2); a = line.intersect(walls[j], &r1); // IMPORTANT 'a == intersect...'
+                            line.setP1(m_list[0]);line.setP2(r1); b = line.intersect(walls[i], &r0); // IMPORTANT 'b == intersect...' statements which
+                                                                                             // give 'a' and 'b' value of one if 'UPDATED r1
+                                                                                             //and r0' belong respectively to walls[j] and walls[i]
+                            if(a==1 && b==1){
+
+                                qDebug()<< "sum3 :" << pow( reflexion_coef(R,r2, walls[k]) * transmission_coef(R,r2,walls) *
+                                                reflexion_coef(r2,r1,walls[j]) * transmission_coef(r2,r1,walls)*
+                                                reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls)*
+                                                transmission_coef(r0,T,walls) / QLineF(m_list[2],R).length()*100 , 2);
+                                sum += pow( reflexion_coef(R,r2, walls[k]) * transmission_coef(R,r2,walls) *
+                                            reflexion_coef(r2,r1,walls[j]) * transmission_coef(r2,r1,walls)*
+                                            reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls)*
+                                            transmission_coef(r0,T,walls) / QLineF(m_list[2],R).length()*100 , 2);
+                                draw_ray(R,r2,3); draw_ray(r2,r1,3);draw_ray(r1,r0,3);
+                                draw_ray(r0,T,3);
+                            }
+                        }
+                        else continue;
+                    }
+                }
+                else continue;
+            }
+        }
+        else continue;
+    }
+
+    return sum;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+TEST REPORT EXEMPLE WITH 30 DEGREES ROTATION, GIVES SAME RESULT (FORTUNATELY!!!)
+
+MainWindow::MainWindow(QWidget *parent) :
+    QMainWindow(parent),
+    ui(new Ui::MainWindow)
+{
+    ui->setupUi(this);
+
+    scene = new QGraphicsScene(this);
+    ui->view->setScene(scene);
+    ui->view->setAlignment(Qt::AlignTop|Qt::AlignLeft);
+
+    QPen meshOutline(Qt::black);
+    ui->view->scene()->addLine(0,0,0,600,meshOutline);
+    ui->view->scene()->addLine(0,0,1300,0,meshOutline);
+
+    Mesh transmitter(125+43.3, 300+216.5-25, 10, 10, 0);
+    Mesh receiver(688.3, 491.5-300, 10, 10, 1);
+    Wall wall0(0, 300, 520, 0, 0.014, 5.0, 0.2, 0);
+    Wall wall1(250, 733, 770, 433, 0.014, 5, 0.2, 0);
+    //QVector<Wall> walls;
+    //walls.insert(0, wall0); walls.insert(1, wall1);
+
+    Wall wall2(216.5, 175, 250+216.5, 733-125, 0.04, 2.25, 0.15, 0);
+    //walls.insert(2,wall2);
+    //Wall wall3(600, 300, 300, 0, NULL, NULL, NULL, 0);
+    //walls.insert(3,wall3);
+
+    QList<Wall> walls{wall0, wall1, wall2};
+    ui->view->scene()->addLine(wall0, wall0.outlinePen);
+    ui->view->scene()->addLine(wall1, wall1.outlinePen);
+    ui->view->scene()->addLine(wall2, wall2.outlinePen);
+    //ui->view->scene()->addLine(wall3, wall3.outlinePen);
+    ui->view->scene()->addRect(transmitter, meshOutline, transmitter.brush);
+    ui->view->scene()->addRect(receiver, meshOutline, receiver.brush);
+
+    qreal he = 3*pow(10,8)/(2.45*pow(10,9)*pi);
+    qreal Ra = 71;
+    qreal Ptx = 0.1; //Watts
+    qreal Gtx = 16/(3*pi);
+
+    QPointF A(5,5); QPointF B(100,100);
+
+    qreal sum = imageMethod2(transmitter, receiver, walls); // computation of the sum in the power computation formula
+
+    qreal Prx = pow(he,2)*60*Gtx*Ptx*sum / (8*Ra);
+    qreal Prx_dBm = 10 * log10( Prx/ 0.001);
+    qDebug() << Prx_dBm << "dBm";
+
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+TEST COLOR RANGE DISPLAY
+
+int i=0;
+
+    for(int k=-25; k>-95; k--){
+        penn.setColor(color(k));
+        ui->view->scene()->addLine(QLine(100+i,600, 100+i, 660), penn);
+        i++;
+    }
+
+/////////////////////////////////////////////////////////////////////////////////////////////
+MainWindow::MainWindow(QWidget *parent) :
+    QMainWindow(parent),
+    ui(new Ui::MainWindow)
+{
+    ui->setupUi(this);
+
+    scene = new QGraphicsScene(this);
+    ui->view->setScene(scene);
+    ui->view->setAlignment(Qt::AlignTop|Qt::AlignLeft);
+
+    //EXTERNAL WALLS IN CONCRETE TYPE=0
+    Wall wall0(0,    0,    1400,  0,    0.19, 0);
+    Wall wall1(0,    700,  1400,  700,  0.19, 0);
+    Wall wall2(1400, 0,    1400,  700,  0.19, 0);
+    Wall wall3(0,    0,    0,     325,  0.19, 0);
+    Wall wall4(0,    425,  0,     700,  0.19, 0);
+
+    //Internal wall, mostly partition wall
+    Wall wall5( 0,   300, 175,  300, 0.05, 1);
+    Wall wall6( 275, 300, 450,  300, 0.06, 1);
+    Wall wall7( 450, 0,   450,  300, 0.05, 1);
+    Wall wall8( 450, 200, 525,  200, 0.05, 1);
+    Wall wall9( 625, 200, 725,  200, 0.05, 1);
+    Wall wall10(700, 0,   700,  200, 0.06, 1);
+    Wall wall11(825, 200, 849,  200, 0.05, 1);
+    Wall wall12(850, 0,   850,  300, 0.06, 1);
+    Wall wall13(850, 300, 950,  300, 0.05, 1);
+    Wall wall14(1050,300, 1400, 300, 0.05, 1);
+
+    //Internal walls, bricks
+    Wall wall15(0, 450, 750, 450, 0.2, 2);
+    Wall wall16(850, 450, 850, 700.2, 2);
+
+    QList<Wall> walls{wall0, wall1, wall2,wall3,wall4,wall5,wall6,wall7,wall8,wall9,wall10,wall11,wall12,wall13,wall14,wall15,wall16};
+    for(int i =0; i<walls.size(); i++){
+        ui->view->scene()->addLine(walls[i], walls[i].outlinePen);
+    }
+
+    qreal he = 3*pow(10,8)/(2.45*pow(10,9)*pi);
+    qreal Ra = 71;
+    qreal Ptx = 0.1; //Watts
+    qreal Gtx = 16/(3*pi);
+    qreal sum; qreal Prx; qreal Prx_dBm;
+
+    QPen meshOutline(Qt::black); QPen penn; int i = -25;
+    Mesh transmitter(500, 300, 5, 5, 0);
+    Mesh receiver(100,100,5,5,1);
+    ui->view->scene()->addRect(transmitter, meshOutline, transmitter.brush);
+    ui->view->scene()->addRect(receiver, meshOutline, receiver.brush);
+    //imageMethod2(transmitter,receiver,walls);
+    /*for(int x=0; x<1400/10; x++){
+        for(int k=0; k<700/10; k++){
+            Mesh receiver(5+x*10, 5+k*10, 10,10,1);
+            receiver.brush.setColor( color(-35-k));
+            ui->view->scene()->addRect(receiver, meshOutline, receiver.brush);
+        }
+
+    }*/
+
+    qreal mapWidth = 1400; qreal mapHeigth = 700; qreal resolution=10;
+    for (int w =0; w<(mapWidth/resolution); w++){
+        for(int h=0; h<(mapHeigth/resolution); h++){
+
+            Mesh receiver((resolution/2) + w*resolution, (resolution/2)+h*resolution, resolution,resolution,1);
+
+            sum = imageMethodColorMap(transmitter,receiver,walls);
+            Prx = pow(he,2)*60*Gtx*Ptx*sum / (8*Ra);
+            Prx_dBm = 10 * log10( Prx/ 0.001);
+            qDebug() << Prx_dBm;
+            receiver.brush.setColor( color(Prx_dBm));
+            ui->view->scene()->addRect(receiver, meshOutline, receiver.brush);
+        }
+    }
+
+    //qreal sum = imageMethod2(transmitter, receiver, walls); // computation of the sum in the power computation formula
+
+    //qreal Prx = pow(he,2)*60*Gtx*Ptx*sum / (8*Ra);
+    //qreal Prx_dBm = 10 * log10( Prx/ 0.001);
+    //qDebug() << Prx_dBm << "dBm";
+
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+TWO ORIGINAL IMAGE METHODS (ONE FOR COLOR MAP OTHER FOR RAYS DISPLAY) -- not working well??
+
+qreal MainWindow::imageMethodColorMap(Mesh TX, Mesh RX, QList<Wall> walls){
+    QPointF R = RX.center(); QPointF T = TX.center();
+    qreal sum=0; // Initialize the sum for total power computation. The 'sum' is the summation where each term
+                // is for one ray. Those terms are the product of total reflection coef and total transmission
+                // coef, divided by square of distance made by the ray (including reflections). 'sum' is updated
+                // as soon as needed information is gathered to compute a new term.
+
+    qreal product = transmission_coef(R,T,walls); // 'product' is the product consisting each term of 'sum'.
+                                                    //Like 'sum', 'product' is updated every time needed
+                                                    //information is gathered to compute a new coef. Note that
+                                                    //it is renewed for each new term of 'sum'.
+
+    sum += pow(product/QLineF(R,T).length()*100,2); // Note '*(100)' is to convert from cm to m units
+
+    int a,b;
+    QPointF r0, r1,r2; QLineF line; QVector<QPointF> m_list;
+
+    // first mirror wrt each wall, and one time reflected rays computations
+    for(int i =0; i < walls.size(); i++){
+
+        m_list.insert(0, mirrorPoint(T, walls[i]) );
+        if( IsReflexionOK(T,R,m_list[0],walls[i]) ){
+            line.setP1(R);line.setP2(m_list[0]); line.intersect(walls[i], &r0);
+
+            sum  += pow(reflexion_coef(T,r0,walls[i]) * transmission_coef(T,r0,walls) * transmission_coef(r0,R,walls) / QLineF(m_list[0],R).length()*100 ,2);
+
+            // second mirror wrt each wall, and twice reflected rays computations
+            for (int j =0; j<walls.size(); j++){
+
+                if(j == i){continue;} // exclude the wall already considered for last mirror point
+                m_list.insert(1, mirrorPoint(m_list[0], walls[j]));
+                if( IsReflexionOK(m_list[0],R,m_list[1],walls[j])){
+                    line.setP1(R);line.setP2(m_list[1]); line.intersect(walls[j], &r1);
+                    line.setP1(m_list[0]);line.setP2(r1); a = line.intersect(walls[i], &r0); // IMPORTANT 'a == intersect...' statement which gives
+                                                                                                // 'a' value of one if 'UPDATED r0' belongs to walls[i]
+
+                    if(a == 1){
+                        sum += pow( reflexion_coef(R,r1, walls[j]) * transmission_coef(R,r1,walls) *
+                                       reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls) *
+                                       transmission_coef(r0,T,walls) / QLineF(m_list[1],R).length()*100 , 2);
+                    }
+
+                    // third mirror wrt each wall, and three times reflected rays computations
+                    for(int k=0; k<walls.size(); k++){
+                        if(k==j){continue;}
+                        m_list.insert(2, mirrorPoint(m_list[1], walls[k]));
+                        if( IsReflexionOK(m_list[1],R,m_list[2],walls[k])){
+                            line.setP1(R);line.setP2(m_list[2]); line.intersect(walls[k], &r2);
+                            line.setP1(m_list[1]);line.setP2(r2); a = line.intersect(walls[j], &r1); // IMPORTANT 'a == intersect...'
+                            line.setP1(m_list[0]);line.setP2(r1); b = line.intersect(walls[i], &r0); // IMPORTANT 'b == intersect...' statements which
+                                                                                             // give 'a' and 'b' value of one if 'UPDATED r1
+                                                                                             //and r0' belong respectively to walls[j] and walls[i]
+                            if(a==1 && b==1){
+                                sum += pow( reflexion_coef(R,r2, walls[k]) * transmission_coef(R,r2,walls) *
+                                            reflexion_coef(r2,r1,walls[j]) * transmission_coef(r2,r1,walls)*
+                                            reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls)*
+                                            transmission_coef(r0,T,walls) / QLineF(m_list[2],R).length()*100 , 2);
+                            }
+                        }
+                        else continue;
+                    }
+                }
+                else continue;
+            }
+        }
+        else continue;
+    }
+
+    return sum;
+}
+
+qreal MainWindow::imageMethod2(Mesh TX, Mesh RX, QList<Wall> walls){
+    QPointF R = RX.center(); QPointF T = TX.center();
+    qreal sum=0; // Initialize the sum for total power computation. The 'sum' is the summation where each term
+                // is for one ray. Those terms are the product of total reflection coef and total transmission
+                // coef, divided by square of distance made by the ray (including reflections). 'sum' is updated
+                // as soon as needed information is gathered to compute a new term.
+
+    draw_ray(R,T,0);
+    qreal product = transmission_coef(R,T,walls); // 'product' is the product consisting each term of 'sum'.
+                                                    //Like 'sum', 'product' is updated every time needed
+                                                    //information is gathered to compute a new coef. Note that
+                                                    //it is renewed for each new term of 'sum'.
+
+    sum += pow(product/QLineF(R,T).length()*100,2); // Note '*(100)' is to convert from cm to m units
+
+    int a,b;
+    QPointF r0, r1,r2; QLineF line; QVector<QPointF> m_list;
+
+    // first mirror wrt each wall, and one time reflected rays computations
+    for(int i =0; i < walls.size(); i++){
+
+        m_list.insert(0, mirrorPoint(T, walls[i]) );
+        if( IsReflexionOK(T,R,m_list[0],walls[i]) ){
+            line.setP1(R);line.setP2(m_list[0]); line.intersect(walls[i], &r0);
+
+            sum  += pow(reflexion_coef(T,r0,walls[i]) * transmission_coef(T,r0,walls) * transmission_coef(r0,R,walls) / QLineF(m_list[0],R).length()*100 ,2);
+            draw_ray(T,r0,1); draw_ray(R,r0,1);
+
+            // second mirror wrt each wall, and twice reflected rays computations
+            for (int j =0; j<walls.size(); j++){
+
+                if(j == i){continue;} // exclude the wall already considered for last mirror point
+                m_list.insert(1, mirrorPoint(m_list[0], walls[j]));
+                if( IsReflexionOK(m_list[0],R,m_list[1],walls[j])){
+                    line.setP1(R);line.setP2(m_list[1]); line.intersect(walls[j], &r1);
+                    line.setP1(m_list[0]);line.setP2(r1); a = line.intersect(walls[i], &r0); // IMPORTANT 'a == intersect...' statement which gives
+                                                                                                // 'a' value of one if 'UPDATED r0' belongs to walls[i]
+
+                    if(a == 1){
+                        sum += pow( reflexion_coef(R,r1, walls[j]) * transmission_coef(R,r1,walls) *
+                                       reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls) *
+                                       transmission_coef(r0,T,walls) / QLineF(m_list[1],R).length()*100 , 2);
+                        draw_ray(R,r1,2); draw_ray(r1,r0,2); draw_ray(r0,T,2);
+                    }
+
+                    // third mirror wrt each wall, and three times reflected rays computations
+                    for(int k=0; k<walls.size(); k++){
+                        if(k==j){continue;}
+                        m_list.insert(2, mirrorPoint(m_list[1], walls[k]));
+                        if( IsReflexionOK(m_list[1],R,m_list[2],walls[k])){
+                            line.setP1(R);line.setP2(m_list[2]); line.intersect(walls[k], &r2);
+                            line.setP1(m_list[1]);line.setP2(r2); a = line.intersect(walls[j], &r1); // IMPORTANT 'a == intersect...'
+                            line.setP1(m_list[0]);line.setP2(r1); b = line.intersect(walls[i], &r0); // IMPORTANT 'b == intersect...' statements which
+                                                                                             // give 'a' and 'b' value of one if 'UPDATED r1
+                                                                                             //and r0' belong respectively to walls[j] and walls[i]
+                            if(a==1 && b==1){
+                                sum += pow( reflexion_coef(R,r2, walls[k]) * transmission_coef(R,r2,walls) *
+                                            reflexion_coef(r2,r1,walls[j]) * transmission_coef(r2,r1,walls)*
+                                            reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls)*
+                                            transmission_coef(r0,T,walls) / QLineF(m_list[2],R).length()*100 , 2);
+                                draw_ray(R,r2,3); draw_ray(r2,r1,3);draw_ray(r1,r0,3);
+                                draw_ray(r0,T,3);
+                            }
+                        }
+                        else continue;
+                    }
+                }
+                else continue;
+            }
+        }
+        else continue;
+    }
+
+    return sum;
+}
+
+/////////////////////////////////////////////////////////////////
+ISOLATING A SPECIFIC CASE OF REFLECTION GIVEN I,J,K ALLOWING TO HARD DEBUG STRANGE ANOMALIES
+
+QPointF R = receiver.center(); QPointF T = transmitter.center();
+    int a,b;
+    QPointF r0, r1,r2; QLineF line; QVector<QPointF> m_list;
+    int i = 1; int j = 2; int k =0;
+    m_list.insert(0, mirrorPoint(T, walls[i]) );
+    m_list.insert(1, mirrorPoint(m_list[0], walls[j]));
+
+            m_list.insert(2, mirrorPoint(m_list[1], walls[k]));
+            if( IsReflexionOK(m_list[1],R,m_list[2],walls[k])){
+                line.setP1(R);line.setP2(m_list[2]); line.intersect(walls[k], &r2); //qDebug() << r2;
+                line.setP1(m_list[1]);line.setP2(r2); a = line.intersect(walls[j], &r1); //qDebug() << r1;// IMPORTANT 'a == intersect...'
+                line.setP1(m_list[0]);line.setP2(r1); b = line.intersect(walls[i], &r0); //qDebug() << r0;// IMPORTANT 'b == intersect...' statements which
+                                                                                 // give 'a' and 'b' value of one if 'UPDATED r1
+                                                                                 //and r0' belong respectively to walls[j] and walls[i]
+                if(a==1 && b==1){
+                    sum += pow( reflexion_coef(R,r2, walls[k]) * transmission_coef(R,r2,walls) *
+                                reflexion_coef(r2,r1,walls[j]) * transmission_coef(r2,r1,walls)*
+                                reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls)*
+                                transmission_coef(r0,T,walls) / QLineF(m_list[2],R).length()*100 , 2);
+
+                    /*qDebug() << "STAAAAAAAAAAAAAAART";
+                                qreal t1 = transmission_coef(R,r2,walls);
+                                qreal t2 = transmission_coef(r2,r1,walls);
+                                qreal t3 =transmission_coef(r1,r0,walls);
+                                qreal t4 = transmission_coef(r0,T,walls);
+                                qDebug() << "R , r2 ref = " <<  reflexion_coef(R,r2, walls[k]) << " and transm = " << t1;
+                                qDebug() << "r2 , r1 ref = " <<  reflexion_coef(r2,r1, walls[j]) << " and transm = " << t2;
+                                qDebug() << "r1 , r0 ref = " <<  reflexion_coef(r1,r0, walls[i]) << " and transm = " << t3;
+                                qDebug() << "r0 , T ref = " <<  t4;*/
+                    qDebug() << i << " , " << j << " , " << k << " sum3 = " << sum;
+                    draw_ray(R,r2,3); draw_ray(r2,r1,3);draw_ray(r1,r0,3);
+                    draw_ray(r0,T,3);
+                }
+            }
+
+//////////////////////////////////////////////////////////////////////////////////////
+HARD DEBUGGING IMAE METHOD
+qreal MainWindow::imageMethod2(Mesh TX, Mesh RX, QList<Wall> walls){
+    QPointF R = RX.center(); QPointF T = TX.center();
+    qreal sum=0; // Initialize the sum for total power computation. The 'sum' is the summation where each term
+                // is for one ray. Those terms are the product of total reflection coef and total transmission
+                // coef, divided by square of distance made by the ray (including reflections). 'sum' is updated
+                // as soon as needed information is gathered to compute a new term.
+
+    draw_ray(R,T,0);
+    qreal product = transmission_coef(R,T,walls); // 'product' is the product consisting each term of 'sum'.
+                                                    //Like 'sum', 'product' is updated every time needed
+                                                    //information is gathered to compute a new coef. Note that
+                                                    //it is renewed for each new term of 'sum'.
+
+    sum += pow(product/QLineF(R,T).length()*100,2); // Note '*(100)' is to convert from cm to m units
+    qDebug() << "sum0 = " << sum;
+
+    int a,b;
+    QPointF r0, r1,r2; QLineF line; QVector<QPointF> m_list;
+
+    // first mirror wrt each wall, and one time reflected rays computations
+    for(int i =0; i < walls.size(); i++){
+
+        m_list.insert(0, mirrorPoint(T, walls[i]) );
+        if( IsReflexionOK(T,R,m_list[0],walls[i]) ){
+            line.setP1(R);line.setP2(m_list[0]); line.intersect(walls[i], &r0);
+
+            sum  += pow(reflexion_coef(T,r0,walls[i]) * transmission_coef(T,r0,walls) * transmission_coef(r0,R,walls) / QLineF(m_list[0],R).length()*100 ,2);
+            qDebug() << "sum1 = " << sum;
+            draw_ray(T,r0,1); draw_ray(R,r0,1);
+        }
+
+        // second mirror wrt each wall, and twice reflected rays computations
+        for (int j =0; j<walls.size(); j++){
+
+                if(j == i){continue;} // exclude the wall already considered for last mirror point, continue skips this for loop step and makes j++
+                m_list.insert(1, mirrorPoint(m_list[0], walls[j]));
+                if( IsReflexionOK(m_list[0],R,m_list[1],walls[j])){
+                    line.setP1(R);line.setP2(m_list[1]); line.intersect(walls[j], &r1);
+                    line.setP1(m_list[0]);line.setP2(r1); a = line.intersect(walls[i], &r0); // IMPORTANT 'a == intersect...' statement which gives
+                                                                                                // 'a' value of one if 'UPDATED r0' belongs to walls[i]
+
+                    if(a == 1){
+                        sum += pow( reflexion_coef(R,r1, walls[j]) * transmission_coef(R,r1,walls) *
+                                       reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls) *
+                                       transmission_coef(r0,T,walls) / QLineF(m_list[1],R).length()*100 , 2);
+                        qDebug() << i << " , " << j << " sum2 = " << sum;
+                        draw_ray(R,r1,2); draw_ray(r1,r0,2); draw_ray(r0,T,2);
+                    }
+                }
+
+                // third mirror wrt each wall, and three times reflected rays computations
+                for(int k=0; k<walls.size(); k++){
+                        if(k==j){continue;}
+                        m_list.insert(2, mirrorPoint(m_list[1], walls[k]));
+                        if( IsReflexionOK(m_list[1],R,m_list[2],walls[k])){
+                            line.setP1(R);line.setP2(m_list[2]); line.intersect(walls[k], &r2);
+                            line.setP1(m_list[1]);line.setP2(r2); a = line.intersect(walls[j], &r1); // IMPORTANT 'a == intersect...'
+                            line.setP1(m_list[0]);line.setP2(r1); b = line.intersect(walls[i], &r0); // IMPORTANT 'b == intersect...' statements which
+                                                                                             // give 'a' and 'b' value of one if 'UPDATED r1
+                                                                                             //and r0' belong respectively to walls[j] and walls[i]
+                            if(a==1 && b==1){
+                                sum += pow( reflexion_coef(R,r2, walls[k]) * transmission_coef(R,r2,walls) *
+                                            reflexion_coef(r2,r1,walls[j]) * transmission_coef(r2,r1,walls)*
+                                            reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls)*
+                                            transmission_coef(r0,T,walls) / QLineF(m_list[2],R).length()*100 , 2);
+                                qDebug() << i << " , " << j << " , " << k << " sum3 = " << sum;
+                                qDebug() << "CHECK :" << sum + 3;
+                                draw_ray(R,r2,3); draw_ray(r2,r1,3);draw_ray(r1,r0,3);
+                                draw_ray(r0,T,3);
+                            }
+                        }
+                }
+        }
+
+    }
+
+    return sum;
+}

@@ -1,0 +1,18 @@
+#ifndef ZONE_H
+#define ZONE_H
+
+#include <QWidget>
+#include <QPen>
+
+class Zone : public QRectF
+{
+public:
+    Zone( int zoneType );
+    int zone;
+    QPen brush;
+    
+private:
+    void setOutlinePen
+};
+
+#endif // ZONE_H
