@@ -10,7 +10,7 @@ Mesh::Mesh(qreal x, qreal y, qreal width, qreal height, int meshType) :
     this->brush.setStyle(Qt::SolidPattern);
     setBrush(mesh);
 
-    this ->antennaH = 170; // let's say antennas height (both rx and tx) are at same height.
+    this ->antennaH = 1.6; // let's say antennas height (both rx and tx) are at same height.
 }
 
 void Mesh :: setBrush(int m){

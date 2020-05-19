@@ -1,0 +1,135 @@
+qreal MainWindow::imageMethodColorMap(Mesh TX, Mesh RX, QList<Wall> walls, qreal scaleX, qreal scaleY){
+    QPointF R = RX.center(); QPointF T = TX.center();
+    qreal sum=0; // Initialize the sum for total power computation. The 'sum' is the summation where each term
+                // is for one ray. Those terms are the product of total reflection coef and total transmission
+                // coef, divided by square of distance made by the ray (including reflections). 'sum' is updated
+                // as soon as needed information is gathered to compute a new term.
+
+    sum += transmission_coef(R,T,walls)/QLineF(R,T).length()*100; // Note '*(100)' is to convert from cm to m units
+
+    int a,b;
+    QPointF r0, r1,r2; QLineF line; QVector<QPointF> m_list;
+
+    // first mirror wrt each wall, and one time reflected rays computations
+    for(int i =0; i < walls.size(); i++){
+
+        m_list.insert(0, mirrorPoint(T, walls[i]) );
+        if( IsReflexionOK(T,R,m_list[0],walls[i]) ){
+            line.setP1(R);line.setP2(m_list[0]); line.intersect(walls[i], &r0);
+
+            sum  += reflexion_coef(T,r0,walls[i]) * transmission_coef(T,r0,walls) * transmission_coef(r0,R,walls) / QLineF(m_list[0],R).length()*100;
+        }
+
+        // second mirror wrt each wall, and twice reflected rays computations
+        for (int j =0; j<walls.size(); j++){
+
+                if(j == i){continue;} // exclude the wall already considered for last mirror point, continue skips this for loop step and makes j++
+                m_list.insert(1, mirrorPoint(m_list[0], walls[j]));
+                if( IsReflexionOK(m_list[0],R,m_list[1],walls[j])){
+                    line.setP1(R);line.setP2(m_list[1]); line.intersect(walls[j], &r1);
+                    line.setP1(m_list[0]);line.setP2(r1); a = line.intersect(walls[i], &r0); // IMPORTANT 'a == intersect...' statement which gives
+                                                                                                // 'a' value of one if 'UPDATED r0' belongs to walls[i]
+
+                    if(a == 1){
+                        sum += reflexion_coef(R,r1, walls[j]) * transmission_coef(R,r1,walls) *
+                               reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls) *
+                               transmission_coef(r0,T,walls) / QLineF(m_list[1],R).length()*100;
+                    }
+                }
+
+                // third mirror wrt each wall, and three times reflected rays computations
+                for(int k=0; k<walls.size(); k++){
+                        if(k==j){continue;}
+                        m_list.insert(2, mirrorPoint(m_list[1], walls[k]));
+                        if( IsReflexionOK(m_list[1],R,m_list[2],walls[k])){
+                            line.setP1(R);line.setP2(m_list[2]); line.intersect(walls[k], &r2);
+                            line.setP1(m_list[1]);line.setP2(r2); a = line.intersect(walls[j], &r1); // IMPORTANT 'a == intersect...'
+                            line.setP1(m_list[0]);line.setP2(r1); b = line.intersect(walls[i], &r0); // IMPORTANT 'b == intersect...' statements which
+                                                                                             // give 'a' and 'b' value of one if 'UPDATED r1
+                                                                                             //and r0' belong respectively to walls[j] and walls[i]
+                            if(a==1 && b==1){
+                                sum += reflexion_coef(R,r2, walls[k]) * transmission_coef(R,r2,walls) *
+                                       reflexion_coef(r2,r1,walls[j]) * transmission_coef(r2,r1,walls)*
+                                       reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls)*
+                                       transmission_coef(r0,T,walls) / QLineF(m_list[2],R).length()*100;
+                            }
+                        }
+                }
+        }
+
+    }
+
+    return sum;
+}
+
+
+qreal MainWindow::imageMethod2(Mesh TX, Mesh RX, QList<Wall> walls, qreal scaleX, qreal scaleY){
+    QPointF R = RX.center(); QPointF T = TX.center();
+    qreal sum=0; // Initialize the sum for total power computation. The 'sum' is the summation where each term
+                // is for one ray. Those terms are the product of total reflection coef and total transmission
+                // coef, divided by square of distance made by the ray (including reflections). 'sum' is updated
+                // as soon as needed information is gathered to compute a new term.
+
+    draw_ray(R,T,0, scaleX, scaleY);
+    sum += transmission_coef(R,T,walls)/QLineF(R,T).length()*100; // Note '*(100)' is to convert from cm to m units
+
+    int a,b;
+    QPointF r0, r1,r2; QLineF line; QVector<QPointF> m_list;
+
+    // first mirror wrt each wall, and one time reflected rays computations
+    for(int i =0; i < walls.size(); i++){
+
+        m_list.insert(0, mirrorPoint(T, walls[i]) );
+        if( IsReflexionOK(T,R,m_list[0],walls[i]) ){
+            line.setP1(R);line.setP2(m_list[0]); line.intersect(walls[i], &r0);
+
+            sum  += reflexion_coef(T,r0,walls[i]) * transmission_coef(T,r0,walls) * transmission_coef(r0,R,walls) / QLineF(m_list[0],R).length()*100;
+            draw_ray(T,r0,1, scaleX, scaleY); draw_ray(R,r0,1, scaleX, scaleY);
+        }
+
+        // second mirror wrt each wall, and twice reflected rays computations
+        for (int j =0; j<walls.size(); j++){
+
+                if(j == i){continue;} // exclude the wall already considered for last mirror point, continue skips this for loop step and makes j++
+                m_list.insert(1, mirrorPoint(m_list[0], walls[j]));
+                if( IsReflexionOK(m_list[0],R,m_list[1],walls[j])){
+                    line.setP1(R);line.setP2(m_list[1]); line.intersect(walls[j], &r1);
+                    line.setP1(m_list[0]);line.setP2(r1); a = line.intersect(walls[i], &r0); // IMPORTANT 'a == intersect...' statement which gives
+                                                                                                // 'a' value of one if 'UPDATED r0' belongs to walls[i]
+
+                    if(a == 1){
+                        sum += reflexion_coef(R,r1, walls[j]) * transmission_coef(R,r1,walls) *
+                               reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls) *
+                               transmission_coef(r0,T,walls) / QLineF(m_list[1],R).length()*100;
+
+                        draw_ray(R,r1,2, scaleX, scaleY); draw_ray(r1,r0,2, scaleX, scaleY); draw_ray(r0,T,2, scaleX, scaleY);
+                    }
+                }
+
+                // third mirror wrt each wall, and three times reflected rays computations
+                for(int k=0; k<walls.size(); k++){
+                        if(k==j){continue;}
+                        m_list.insert(2, mirrorPoint(m_list[1], walls[k]));
+                        if( IsReflexionOK(m_list[1],R,m_list[2],walls[k])){
+                            line.setP1(R);line.setP2(m_list[2]); line.intersect(walls[k], &r2);
+                            line.setP1(m_list[1]);line.setP2(r2); a = line.intersect(walls[j], &r1); // IMPORTANT 'a == intersect...'
+                            line.setP1(m_list[0]);line.setP2(r1); b = line.intersect(walls[i], &r0); // IMPORTANT 'b == intersect...' statements which
+                                                                                             // give 'a' and 'b' value of one if 'UPDATED r1
+                                                                                             //and r0' belong respectively to walls[j] and walls[i]
+                            if(a==1 && b==1){
+                                sum += reflexion_coef(R,r2, walls[k]) * transmission_coef(R,r2,walls) *
+                                       reflexion_coef(r2,r1,walls[j]) * transmission_coef(r2,r1,walls)*
+                                       reflexion_coef(r1,r0,walls[i]) * transmission_coef(r1,r0,walls)*
+                                       transmission_coef(r0,T,walls) / QLineF(m_list[2],R).length()*100;
+
+                                draw_ray(R,r2,3, scaleX, scaleY); draw_ray(r2,r1,3, scaleX, scaleY);draw_ray(r1,r0,3, scaleX, scaleY);
+                                draw_ray(r0,T,3, scaleX, scaleY);
+                            }
+                        }
+                }
+        }
+
+    }
+
+    return sum;
+}

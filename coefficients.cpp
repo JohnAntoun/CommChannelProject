@@ -85,16 +85,16 @@ qreal abs_tot_transmission_coef(qreal theta_i, qreal eps_rel, qreal sigma, qreal
     return abs( ((1.0-pow(perp_coef,2))*exp(-s*gamma)) / ((1.0-pow(perp_coef,2)*exp_part)));
 }
 
-qreal reflexion_coef_wall(qreal theta_i, qreal eps_rel){
+qreal abs_reflexion_coef_wall(qreal theta_i, qreal eps_rel){
     //Compute reflexion coefficient, perpendicular case, for reflexions on walls (3.54)
 
-    qreal a = sqrt(eps_rel)*sqrt( 1-(1/eps_rel)*pow(sin(theta_i),2) );
-    return abs( ( cos(theta_i)- a ) / ( cos(theta_i)+a ) );
+    qreal a = sqrt(eps_rel)*sqrt( 1-(pow(sin(theta_i),2)/eps_rel) );
+    return abs( ( cos(theta_i)- a ) / ( cos(theta_i)+a )  );
 }
 
-qreal reflexion_coef_ground(qreal theta_i, qreal eps_rel){
+qreal abs_reflexion_coef_ground(qreal TX_h, qreal RX_h, qreal d, qreal eps_rel){
     //Compute reflexion coefficient, parallel case, for reflexions on ground (3.54)
-
-    qreal a = sqrt(1/eps_rel)*sqrt( 1-(1/eps_rel)*pow(sin(theta_i),2) );
+    qreal theta_i = (pi/2) - qAtan((TX_h+RX_h)/d);
+    qreal a = sqrt(1/eps_rel)*sqrt( 1-(pow(sin(theta_i),2)/eps_rel));
     return abs( ( cos(theta_i)- a ) / ( cos(theta_i)+a ) );
 }
