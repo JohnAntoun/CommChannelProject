@@ -194,7 +194,7 @@ complex<qreal> MainWindow::imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QL
                 complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
                 //see eq. 3.43
                 //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
-                sum += phase(beta,d_los)*phase_arg_fresnel*sqrt(fresnel2/d_los); // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
+                sum += phase(beta,s12)*phase_arg_fresnel*sqrt(fresnel2)/s12; // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
             }
 
 
@@ -216,7 +216,7 @@ complex<qreal> MainWindow::imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QL
                 complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
                 //see eq. 3.43
                 //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
-                sum += phase(beta,d_los)*phase_arg_fresnel*sqrt(fresnel2/d_los); // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
+                sum += phase(beta,s12)*phase_arg_fresnel*sqrt(fresnel2)/s12; // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
             }
         }
     }
