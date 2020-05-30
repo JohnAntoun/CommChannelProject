@@ -1,4 +1,4 @@
-QT += widgets
+QT += widgets printsupport
 
 FORMS += \
     mainwindow.ui
@@ -8,7 +8,9 @@ HEADERS += \
     mainwindow.h \
     mapCreation.h \
     mesh.h \
+    qcustomplot.h \
     ray.h \
+    regression.h \
     wall.h
 
 SOURCES += \
@@ -17,5 +19,7 @@ SOURCES += \
     mainwindow.cpp \
     mapCreation.cpp \
     mesh.cpp \
+    qcustomplot.cpp \
     ray.cpp \
+    regression.cpp \
     wall.cpp

@@ -2,18 +2,25 @@
 #include "ui_mainwindow.h"
 #include "coefficients.h"
 #include "wall.h"
+#
 #include "mapCreation.h"
 #include <algorithm>
+#include "qcustomplot.h"
+#include "regression.h"
+
 #define pi 3.14159
+#define k_boltz 1.379*pow(10,-23)
 
 bool IsReflexionOK(QPointF A, QPointF B, QPointF mirror, QLineF line);
 bool isNotOnWall(QPointF A, QLineF wall);
 bool checkLOS(QPointF A, QPointF B, QList<Wall> walls);
 qreal dist_point_line(QLineF line, QPointF p);
+bool isObtuseAngle(QLineF BA, QLineF BC);
 
 QColor color(qreal power);
 const qreal mapWidth =1340, mapHeigth = 640;
 
+//Channel parameters
 const qreal frequency = 26*pow(10,9);
 const qreal beta = (2*pi*frequency)/(3*pow(10,8));
 const qreal he = 3*pow(10,8)/(frequency*pi); // he = lambda/pi = c/(f*pi)
@@ -21,13 +28,22 @@ const qreal Ra = 71;
 const qreal EIRPmax = 2; //Watts
 const qreal Gtx = 16/(3*pi);
 const qreal Ptx = EIRPmax/Gtx; //Watts
+const qreal Ptx_dBm = 10 * log10(Ptx/0.001);
+
+//Link Budget
+const qreal SNR = 8; //dB
+const qreal R_noise_fig = 10; //dB
+const qreal interference_margin = 6; //dB
+const qreal Bmax = 200*pow(10,6); // max bandwidth 200MHz
+const qreal thermal_noise = 10*log10(k_boltz*290*Bmax/0.001); //dBm
+const qreal loss = (SNR+R_noise_fig+interference_margin+thermal_noise);
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-
+    qDebug() << "loss " <<loss;
     scene = new QGraphicsScene(this);
     ui->view->setRenderHints(QPainter::Antialiasing);
     ui->view->setScene(scene);
@@ -37,49 +53,69 @@ MainWindow::MainWindow(QWidget *parent) :
     QList<Wall> walls, diffr; qreal scaleX; qreal scaleY; //the list walls contains the building walls on which rays are reflected,
                                                            //diffr contains virutal walls useful for diffraction
                                                            // scaleX,Y are for display window fitting purpose
-
-    //tie(walls, diffr, scaleX, scaleY) = createStreetMap(mapWidth,mapHeigth); // this function creates a street map and returns the list of walls,
+    tie(walls, diffr, scaleX, scaleY) = createStreetMap(mapWidth,mapHeigth); // this function creates a street map and returns the list of walls,
                                                                                // diffr,scaling factors
+    scaleY = scaleX;
 
     //small exemple, see exercise session 3 knife edge - place T and R accordingly
-    Wall wall0(100 ,50 ,100 , 71.5, 0.3, 5);
-    diffr.append(wall0); walls.append(wall0); //the wall of this exemple will be both for reflection and diffraction
-    scaleX = mapWidth/150;
-    scaleY = mapHeigth/150;
-        qDebug() << "Ptx = " <<Ptx;
-    ui->view->scene()->addLine(QLineF(diffr[0].p1().x()*scaleX,
-                                      diffr[0].p1().y()*scaleY,
-                                      diffr[0].p2().x()*scaleX,
-                                      diffr[0].p2().y()*scaleY), diffr[0].outlinePen);
+//    Wall wall0(100 ,50 ,100 , 71.5, 0.3, 5);
+//    diffr.append(wall0); walls.append(wall0); //the wall of this exemple will be both for reflection and diffraction
+//    scaleX = mapWidth/150;
+//    scaleY = mapHeigth/150;
+//        qDebug() << "Ptx = " <<Ptx;
+//    ui->view->scene()->addLine(QLineF(diffr[0].p1().x()*scaleX,
+//                                      diffr[0].p1().y()*scaleY,
+//                                      diffr[0].p2().x()*scaleX,
+//                                      diffr[0].p2().y()*scaleY), diffr[0].outlinePen);
+
 
     QPen meshOutline(Qt::black);
-    Mesh transmitter(85, 50, 5, 5, 0);
-   // Mesh receiver(105, 70, 5 ,5 ,1);
+    Mesh transmitter(45, 22, 5, 5, 0);
+    //Mesh receiver(174, 14, 5 ,5 ,1);
     ui->view->scene()->addRect(QRectF((transmitter.centerX*scaleX)-transmitter.width()/2, (transmitter.centerY*scaleY)-transmitter.height()/2, transmitter.width(), transmitter.height()), meshOutline, transmitter.brush);
     //ui->view->scene()->addRect(QRectF((receiver.centerX*scaleX)-receiver.width()/2, (receiver.centerY*scaleY)-receiver.height()/2, receiver.width(), receiver.height()), meshOutline, receiver.brush);
 
 
     qreal Prx = 0, Prx_dBm = 0;
     complex<qreal> sum = 0;
-   // qreal mapWidth = 1400; qreal mapHeigth = 700; qreal resolution=10;
+   // qreal mapWidth = 1400; qreal mapHeigth = 700;
+    qreal resolution=1;
 
+    QVector<qreal> dist,P_rx_vec; //vectors to make plot
+    int idx = 0;
+    QPointF T=transmitter.center(), R;
 
     //launch color map from here, treat each meter square as a receiver antenna, comment this section and uncomment next section to display rays for a specific receiver
-    for (int w =0; w<(200); w++){
-        for(int h=0; h<(200); h++){
+    for (int w =0; w<(253/resolution); w++){
+        for(int h=0; h<(50/resolution); h++){
 
-            Mesh receiver(w+0.5, h+0.5, 1*scaleX, 1*scaleY, 1);
+            if((w*resolution<80 && h*resolution<20) || (w*resolution>=95 && w*resolution<165 && h*resolution<20) || (w*resolution>=175 && h*resolution<15) || (w*resolution<80 && h*resolution>=30) || (w*resolution>=95 && w*resolution<165 && h*resolution>=30) || (w*resolution>=175 && h*resolution>=30) ){
+            //do nothing...
+            }
+            else{
+                Mesh receiver(w*resolution+resolution/2, h*resolution+resolution/2, 1*scaleX, 1*scaleY, 1);
+                R = receiver.center();
 
-            sum = imageMethod5GColorMap(transmitter,receiver,walls, diffr);
-            Prx = pow(he,2)*60*EIRPmax*pow(abs(sum),2) / (8*Ra); //EQUATION 3.51
-            Prx_dBm = 10 * log10( Prx/ 0.001);
-            qDebug() << w << " , " << h << " : " << Prx_dBm;
-            receiver.brush.setColor( color(Prx_dBm));
-            ui->view->scene()->addRect(QRectF((receiver.centerX*scaleX)-receiver.width()/2, (receiver.centerY*scaleY)-receiver.height()/2, receiver.width(), receiver.height()), meshOutline, receiver.brush);
+                sum = imageMethod5GColorMap(transmitter,receiver,walls, diffr);
+                Prx = pow(he,2)*60*EIRPmax*pow(abs(sum),2) / (8*Ra); //EQUATION 3.51
+                Prx_dBm = 10 * log10( Prx/ 0.001);
+
+                //qDebug() << w*resolution+resolution/2 << " , " << h*resolution+resolution/2 << " : " << Prx_dBm;
+                receiver.brush.setColor( color(Prx_dBm));
+                ui->view->scene()->addRect(QRectF((receiver.centerX*scaleX)-receiver.width()/2, (receiver.centerY*scaleY)-receiver.height()/2, receiver.width(), receiver.height()), meshOutline, receiver.brush);
+
+                if(QLineF(T,R).length() > 10  && h<30 && h>=20){
+                    dist.insert(idx, log10(QLineF(T,R).length()) );
+                    qDebug() << dist[idx] << " " << Prx_dBm;
+                    P_rx_vec.insert(idx, Prx_dBm);
+                    idx++;
+                }
+            }
         }
     }
+    makePathLossPlots(dist, P_rx_vec); //Plot the path loss
 
-    //DISPLAY RAYS FOR SPECIFIC RECEIVER (uncomment below to make it happen), don't forget to place receiver (line 57)
+//    //DISPLAY RAYS FOR SPECIFIC RECEIVER (uncomment below to make it happen), don't forget to place receiver (line 57)
 //    //visualize a ray tracing from here
 //    sum = imageMethod5G(transmitter, receiver, walls, diffr, scaleX, scaleY); // computation of the sum in the power computation formula
 //    qDebug() << "sum = " << sum.real() << " + i" << sum.imag();
@@ -104,6 +140,7 @@ MainWindow::MainWindow(QWidget *parent) :
                                               diffr[wall].p2().y()*scaleY), diffr[wall].outlinePen);
         }
     }
+
 }
 
 MainWindow::~MainWindow()
@@ -130,64 +167,58 @@ complex<qreal> MainWindow::imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QL
         d2 = sqrt(pow(TX.antennaH+RX.antennaH,2)+pow(d_los,2)); //d2 for reflection on ground eq.3.7
         sum += phase(beta,d2)*abs_reflexion_coef_ground(TX.antennaH, RX.antennaH, d_los, eps_gnd)/d2; //see eq. 3.7 last arg=5 is for ground permitivity
     }
-    else{ //if not LOS -> diffraction
-        int obs_idx;
+
+    else{ //if not LOS -> d iffraction
         QPointF inters;
-        qreal min_d = d_los;
         qreal dr, v, fresnel2,d12,s12;
 
         //check which diffraction walls are obstacle and take the closest one
         for(int m=0; m<diffr.size(); m++){
-            if( diffr[m].intersect(QLineF(T,R), &inters)==1 && QLineF(T,inters).length() <= min_d){
-                    obs_idx = m;
-                    min_d = QLineF(T,inters).length();
+
+            //compute diffraction only if diffraction ray does not cross any obstable, else just move on
+            //first check from one side of the wall --> p1(), next if is for the other side of the wall --> p2()
+            if(diffr[m].intersect(QLineF(T,R), &inters)==1 && checkLOS(R,diffr[m].p1(),walls) && checkLOS(T,diffr[m].p1(),walls) ){
+                draw_ray(T,diffr[m].p1(),0,scaleX,scaleY);
+                draw_ray(R,diffr[m].p1(),0,scaleX,scaleY);
+
+                diffr[m].intersect(QLineF(T,R), &inters); //get intersection between TR line and diffraction wall
+                d12 = dist_point_line(diffr[m],T)+dist_point_line(diffr[m],R);
+                s12 = QLineF(T,diffr[m].p1()).length() + QLineF(R,diffr[m].p1()).length();
+                //qDebug() << "d1 = " << QLineF(T,inters).length();
+                //qDebug() << "d12 = " << d12;
+                //qDebug() << "s12 = " << s12;
+                dr = s12 - d12; //see delata_r eq 3.56 of course
+                //qDebug() << "dr = " << dr;
+                v = sqrt( (2*beta*dr)/pi  ); //see eq 3.57
+                fresnel2 = 1 /(( sqrt( pow(v-0.1,2)+1 ) + v-0.1 )*2.2131); //fresnel coef squarred (in not dB!), eq 3.58
+                complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
+                //see eq. 3.43
+                //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
+                sum += phase(beta,d_los)*phase_arg_fresnel*sqrt(fresnel2/d_los); // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
+            }
+
+
+            // second check from OTHER side of the wall --> p2()
+            if(diffr[m].intersect(QLineF(T,R), &inters)==1 && checkLOS(R,diffr[m].p2(),walls) && checkLOS(T,diffr[m].p2(),walls)){
+                draw_ray(T,diffr[m].p2(),0,scaleX,scaleY);
+                draw_ray(R,diffr[m].p2(),0,scaleX,scaleY);
+
+                diffr[m].intersect(QLineF(T,R), &inters); //get intersection between TR line and diffraction wall
+                d12 = dist_point_line(diffr[m],T)+dist_point_line(diffr[m],R);
+                s12 = QLineF(T,diffr[m].p2()).length() + QLineF(R,diffr[m].p2()).length();
+                //qDebug() << "d1 = " << QLineF(T,inters).length();
+                //qDebug() << "d12 = " << d12;
+                //qDebug() << "s12 = " << s12;
+                dr = s12 - d12; //see delata_r eq 3.56 of course
+                //qDebug() << "dr = " << dr;
+                v = sqrt( (2*beta*dr)/pi  ); //see eq 3.57
+                fresnel2 = 1 /(( sqrt( pow(v-0.1,2)+1 ) + v-0.1 )*2.2131); //fresnel coef squarred (in not dB!), eq 3.58
+                complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
+                //see eq. 3.43
+                //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
+                sum += phase(beta,d_los)*phase_arg_fresnel*sqrt(fresnel2/d_los); // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
             }
         }
-
-        //compute diffraction only if diffraction ray does not cross any obstable, else just move on
-        //first check from one side of the wall --> p1(), next if is for the other side of the wall --> p2()
-        if(checkLOS(T,diffr[obs_idx].p1(),walls) && checkLOS(R,diffr[obs_idx].p1(),walls)){
-            draw_ray(T,diffr[obs_idx].p1(),0,scaleX,scaleY);
-            draw_ray(R,diffr[obs_idx].p1(),0,scaleX,scaleY);
-
-            diffr[obs_idx].intersect(QLineF(T,R), &inters); //get intersection between TR line and diffraction wall
-            d12 = dist_point_line(diffr[obs_idx],T)+dist_point_line(diffr[obs_idx],R);
-            s12 = QLineF(T,diffr[obs_idx].p1()).length() + QLineF(R,diffr[obs_idx].p1()).length();
-            //qDebug() << "d1 = " << QLineF(T,inters).length();
-            //qDebug() << "d12 = " << d12;
-            //qDebug() << "s12 = " << s12;
-            dr = s12 - d12; //see delata_r eq 3.56 of course
-            //qDebug() << "dr = " << dr;
-            v = sqrt( (2*beta*dr)/pi  ); //see eq 3.57
-            fresnel2 = 1 /(( sqrt( pow(v-0.1,2)+1 ) + v-0.1 )*2.2131); //fresnel coef squarred (in not dB!), eq 3.58
-            complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
-            //see eq. 3.43
-            //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
-            sum += phase(beta,d_los)*phase_arg_fresnel*sqrt(fresnel2/d_los); // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
-        }
-
-
-        // second check from OTHER side of the wall --> p2()
-        if(checkLOS(T,diffr[obs_idx].p2(),walls) && checkLOS(R,diffr[obs_idx].p2(),walls)){
-            draw_ray(T,diffr[obs_idx].p2(),0,scaleX,scaleY);
-            draw_ray(R,diffr[obs_idx].p2(),0,scaleX,scaleY);
-
-            diffr[obs_idx].intersect(QLineF(T,R), &inters); //get intersection between TR line and diffraction wall
-            d12 = dist_point_line(diffr[obs_idx],T)+dist_point_line(diffr[obs_idx],R);
-            s12 = QLineF(T,diffr[obs_idx].p2()).length() + QLineF(R,diffr[obs_idx].p2()).length();
-            //qDebug() << "d1 = " << QLineF(T,inters).length();
-            //qDebug() << "d12 = " << d12;
-            //qDebug() << "s12 = " << s12;
-            dr = s12 - d12; //see delata_r eq 3.56 of course
-            //qDebug() << "dr = " << dr;
-            v = sqrt( (2*beta*dr)/pi  ); //see eq 3.57
-            fresnel2 = 1 /(( sqrt( pow(v-0.1,2)+1 ) + v-0.1 )*2.2131); //fresnel coef squarred (in not dB!), eq 3.58
-            complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
-            //see eq. 3.43
-            //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
-            sum += phase(beta,d_los)*phase_arg_fresnel*sqrt(fresnel2/d_los); // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
-        }
-
     }
 
 
@@ -276,57 +307,52 @@ complex<qreal> MainWindow::imageMethod5GColorMap(Mesh TX, Mesh RX, QList<Wall> w
         sum += phase(beta,d2)*abs_reflexion_coef_ground(TX.antennaH, RX.antennaH, d_los, eps_gnd)/d2; //see eq. 3.7 last arg=5 is for ground permitivity
     }
     else{ //if not LOS -> diffraction
-        int obs_idx;
         QPointF inters;
-        qreal min_d = d_los;
         qreal dr, v, fresnel2,d12,s12;
 
         //check which diffraction walls are obstacle and take the closest one
         for(int m=0; m<diffr.size(); m++){
-            if( diffr[m].intersect(QLineF(T,R), &inters)==1 && QLineF(T,inters).length() <= min_d){
-                    obs_idx = m;
-                    min_d = QLineF(T,inters).length();
+
+            //compute diffraction only if diffraction ray does not cross any obstable, else just move on
+            //first check from one side of the wall --> p1(), next if is for the other side of the wall --> p2()
+            if(diffr[m].intersect(QLineF(T,R), &inters)==1 && checkLOS(R,diffr[m].p1(),walls) && checkLOS(T,diffr[m].p1(),walls) ){
+
+                diffr[m].intersect(QLineF(T,R), &inters); //get intersection between TR line and diffraction wall
+                d12 = dist_point_line(diffr[m],T)+dist_point_line(diffr[m],R);
+                s12 = QLineF(T,diffr[m].p1()).length() + QLineF(R,diffr[m].p1()).length();
+                //qDebug() << "d1 = " << QLineF(T,inters).length();
+                //qDebug() << "d12 = " << d12;
+                //qDebug() << "s12 = " << s12;
+                dr = s12 - d12; //see delata_r eq 3.56 of course
+                //qDebug() << "dr = " << dr;
+                v = sqrt( (2*beta*dr)/pi  ); //see eq 3.57
+                fresnel2 = 1 /(( sqrt( pow(v-0.1,2)+1 ) + v-0.1 )*2.2131); //fresnel coef squarred (in not dB!), eq 3.58
+                complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
+                //see eq. 3.43
+                //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
+                sum += phase(beta,s12)*phase_arg_fresnel*sqrt(fresnel2)/s12; // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
+            }
+
+
+            // second check from OTHER side of the wall --> p2()
+            if(diffr[m].intersect(QLineF(T,R), &inters)==1 && checkLOS(R,diffr[m].p2(),walls) && checkLOS(T,diffr[m].p2(),walls)){
+
+                diffr[m].intersect(QLineF(T,R), &inters); //get intersection between TR line and diffraction wall
+                d12 = dist_point_line(diffr[m],T)+dist_point_line(diffr[m],R);
+                s12 = QLineF(T,diffr[m].p2()).length() + QLineF(R,diffr[m].p2()).length();
+                //qDebug() << "d1 = " << QLineF(T,inters).length();
+                //qDebug() << "d12 = " << d12;
+                //qDebug() << "s12 = " << s12;
+                dr = s12 - d12; //see delata_r eq 3.56 of course
+                //qDebug() << "dr = " << dr;
+                v = sqrt( (2*beta*dr)/pi  ); //see eq 3.57
+                fresnel2 = 1 /(( sqrt( pow(v-0.1,2)+1 ) + v-0.1 )*2.2131); //fresnel coef squarred (in not dB!), eq 3.58
+                complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
+                //see eq. 3.43
+                //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
+                sum += phase(beta,s12)*phase_arg_fresnel*sqrt(fresnel2)/s12; // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
             }
         }
-
-        //compute diffraction only if diffraction ray does not cross any obstable, else just move one
-        if(checkLOS(T,diffr[obs_idx].p1(),walls) && checkLOS(R,diffr[obs_idx].p1(),walls)){
-
-            diffr[obs_idx].intersect(QLineF(T,R), &inters); //get intersection between TR line and diffraction wall
-            d12 = dist_point_line(diffr[obs_idx],T)+dist_point_line(diffr[obs_idx],R);
-            s12 = QLineF(T,diffr[obs_idx].p1()).length() + QLineF(R,diffr[obs_idx].p1()).length();
-            //qDebug() << "d1 = " << QLineF(T,inters).length();
-            //qDebug() << "d12 = " << d12;
-            //qDebug() << "s12 = " << s12;
-            dr = s12 - d12; //see delata_r eq 3.56 of course
-            //qDebug() << "dr = " << dr;
-            v = sqrt( (2*beta*dr)/pi  ); //see eq 3.57
-            fresnel2 = 1 /(( sqrt( pow(v-0.1,2)+1 ) + v-0.1 )*2.2131); //fresnel coef squarred (in not dB!), eq 3.58
-            complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
-            //see eq. 3.43
-            //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
-            sum += phase(beta,d_los)*phase_arg_fresnel*sqrt(fresnel2/d_los); // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
-        }
-
-        //compute diffraction only if diffraction ray does not cross any obstable, else just move one
-        if(checkLOS(T,diffr[obs_idx].p2(),walls) && checkLOS(R,diffr[obs_idx].p2(),walls)){
-
-            diffr[obs_idx].intersect(QLineF(T,R), &inters); //get intersection between TR line and diffraction wall
-            d12 = dist_point_line(diffr[obs_idx],T)+dist_point_line(diffr[obs_idx],R);
-            s12 = QLineF(T,diffr[obs_idx].p2()).length() + QLineF(R,diffr[obs_idx].p2()).length();
-            //qDebug() << "d1 = " << QLineF(T,inters).length();
-            //qDebug() << "d12 = " << d12;
-            //qDebug() << "s12 = " << s12;
-            dr = s12 - d12; //see delata_r eq 3.56 of course
-            //qDebug() << "dr = " << dr;
-            v = sqrt( (2*beta*dr)/pi  ); //see eq 3.57
-            fresnel2 = 1 /(( sqrt( pow(v-0.1,2)+1 ) + v-0.1 )*2.2131); //fresnel coef squarred (in not dB!), eq 3.58
-            complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
-            //see eq. 3.43
-            //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
-            sum += phase(beta,d_los)*phase_arg_fresnel*sqrt(fresnel2/d_los); // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
-        }
-
     }
 
     int a,b;
@@ -385,7 +411,6 @@ complex<qreal> MainWindow::imageMethod5GColorMap(Mesh TX, Mesh RX, QList<Wall> w
 
     return sum;
 }
-
 
 
 QPointF MainWindow::mirrorPoint(QPointF P, QLineF d){
@@ -450,24 +475,24 @@ bool isNotOnWall(QPointF A, QLineF wall){
     return cross_p > 0.05; // It is unsafe to compare floating points with zero so give arbitrary security margin of 0.05
 }
 
-qreal MainWindow :: transmission_coef(QPointF A, QPointF B, QList<Wall> walls){
-    // Identify and compute the total transmission coef of a ray from A to B through all intersected walls
-    // Note the use of isNotOnWall function to check if considered points are not on wall itself
+//qreal MainWindow :: transmission_coef(QPointF A, QPointF B, QList<Wall> walls){
+//    // Identify and compute the total transmission coef of a ray from A to B through all intersected walls
+//    // Note the use of isNotOnWall function to check if considered points are not on wall itself
 
-    qreal product = 1; //put a first neutral coef equal to one, then update the product when a transmission is found
-    qreal thetai;
+//    qreal product = 1; //put a first neutral coef equal to one, then update the product when a transmission is found
+//    qreal thetai;
 
-    for(int i=0; i<walls.size(); i++){
-        bool ok = (walls[i].intersect( QLineF(A,B), nullptr)==1) && isNotOnWall(A,walls[i]) && isNotOnWall(B,walls[i]);
-        if(ok){
-            thetai = theta_i( QLineF(A,B), walls[i]);
-            product = product*abs_tot_transmission_coef(thetai, walls[i].permittivity, walls[i].conductivity, walls[i].thickness);
+//    for(int i=0; i<walls.size(); i++){
+//        bool ok = (walls[i].intersect( QLineF(A,B), nullptr)==1) && isNotOnWall(A,walls[i]) && isNotOnWall(B,walls[i]);
+//        if(ok){
+//            thetai = theta_i( QLineF(A,B), walls[i]);
+//            product = product*abs_tot_transmission_coef(thetai, walls[i].permittivity, walls[i].conductivity, walls[i].thickness);
 
-        }
-        else continue;
-    }
-    return product;
-}
+//        }
+//        else continue;
+//    }
+//    return product;
+//}
 
 bool checkLOS(QPointF A, QPointF B, QList<Wall> walls){
     // For 5G case, check if computed ray crosses path of a wall. If yes, return false.
@@ -505,6 +530,109 @@ qreal dist_point_line(QLineF line, QPointF p){
     return abs(-a*p.x()+p.y()-c)/sqrt(a*a+1);
     }
 }
+
+bool isObtuseAngle(QLineF BA, QLineF BC){
+    //return if angle made between AB and BC vectors is obtuse. Will be if dot product is negative
+    //qDebug() << BA.dx()<< ' ' << BC.dx() << ' ' << BA.dy() << BC.dy();
+    return (( (BA.dx())*(BC.dx()) + (BA.dy())*(BC.dy())  ) < 0 );
+}
+
+void MainWindow::makePathLossPlots(QVector<qreal> dist_vec, QVector<qreal> Prx_vec){
+
+    // --- FOLLOWING CODE IS LEAST SQURE REGRESSION LINE ALGORITHM FOUND HERE: https://www.bragitoff.com/2015/09/c-program-to-linear-fit-the-data-using-least-squares-method/
+    qreal n = dist_vec.size();
+    qreal xsum=0,x2sum=0,ysum=0,xysum=0;                //variables for sums/sigma of xi,yi,xi^2,xiyi etc
+    for (int i=0; i<n; i++)
+    {
+        xsum=xsum+dist_vec[i];                        //calculate sigma(xi)
+        ysum=ysum+Prx_vec[i];                        //calculate sigma(yi)
+        x2sum=x2sum+pow(dist_vec[i],2);                //calculate sigma(x^2i)
+        xysum=xysum+dist_vec[i]*Prx_vec[i];                    //calculate sigma(xi*yi)
+    }
+    qreal a=(n*xysum-xsum*ysum)/(n*x2sum-xsum*xsum);            //calculate slope
+    qreal b=(x2sum*ysum-xsum*xysum)/(x2sum*n-xsum*xsum);            //calculate intercept
+
+    QVector<qreal> Prx_fit(n);                        //Prx vector that fits the scattering data
+    qreal var_sum = 0;                               //init variance sum, devide by n after the for loop below
+    for (int k=0; k<n; k++){
+        Prx_fit[k]=a*dist_vec[k]+b;                    //to calculate y(fitted) at given x points
+        var_sum += pow(Prx_fit[k] - Prx_vec[k],2);
+    }
+
+    qreal std_dev = sqrt(var_sum/n);
+
+    //--- END OF REGRESSIONLINE ALGORITHM --- //
+    //Compute standard deviation from Prx_fit has been incorporated in the above fitting algorithm
+
+    qDebug() << "y = " << a << " * x + " << b;
+    qDebug() << "std_dev = " << std_dev;
+
+    //    ui->customPlot->legend->setVisible(true);
+    //    ui->customPlot->legend->setFont(QFont("Helvetica",9));
+    //    // set locale to english, so we get english decimal separator:
+    //    ui->customPlot->setLocale(QLocale(QLocale::English, QLocale::UnitedKingdom));
+
+        // add data point graph:
+        ui->customPlot->addGraph();
+        ui->customPlot->graph(0)->setPen(QPen(Qt::blue));
+        ui->customPlot->graph(0)->setLineStyle(QCPGraph::lsNone);
+        ui->customPlot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCross, 4));
+
+        ui->customPlot->addGraph();
+        ui->customPlot->graph(1)->setPen(QPen(Qt::red));
+        //ui->customPlot->graph(0)->setLineStyle(QCPGraph::lsNone);
+        //ui->customPlot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCross, 4));
+
+
+        // pass data to graphs and let QCustomPlot determine the axes ranges so the whole thing is visible:
+        ui->customPlot->graph(0)->setData(dist_vec, Prx_vec);
+        ui->customPlot->graph(0)->rescaleAxes();
+        ui->customPlot->graph(1)->setData(dist_vec, Prx_fit);
+        ui->customPlot->graph(1)->rescaleAxes();
+
+        ui->customPlot->axisRect()->setupFullAxesBox();
+
+        makeCellRangePlot(a,b,std_dev);
+}
+
+void MainWindow::makeCellRangePlot(qreal slope, qreal intercept, qreal sigma){
+
+
+    //Compute probability of connection, that is, probability that path loss is bigger than max allowed path loss for connection.
+    // P[L(r) < Lm] = P[ L_sigma < ( Lm-avg_L(r) ) ] = 1 - P[L_sigma > Prx_fit-loss] = 1-0.5*erfc(...) --> see page 56 lecture ntoes
+    int n=350;
+    QVector<qreal> prob(n);
+    QVector<qreal> dist_vecr(n); //make a distance vector
+    QVector<qreal> Fu(n);
+    qreal Prx_av, a, b;
+    for(int i=0; i<n; i++){
+        dist_vecr[i] = i;
+        Prx_av = slope*log10(dist_vecr[i]) + intercept;
+        prob[i] = 1 - 0.5 * erfc( (Prx_av - loss)/(sigma*sqrt(2)) );
+        a = (Prx_av - loss)/(sqrt(2)*sigma);
+        qDebug() << "e = " << exp(1);
+        b = abs(slope)*log10(exp(1))/(sqrt(2)*sigma);
+        Fu[i] = 1 - 0.5*erfc(a) + 0.5*exp(2*a/b + 1/pow(b,2))*erfc(a+1/b);
+    }
+
+    // add data point graph:
+    ui->probaPlot->addGraph();
+    ui->probaPlot->graph(0)->setPen(QPen(Qt::blue));
+
+    ui->probaPlot->addGraph();
+    ui->probaPlot->graph(1)->setPen(QPen(Qt::red));
+
+    // pass data to graphs and let QCustomPlot determine the axes ranges so the whole thing is visible:
+    ui->probaPlot->graph(0)->setData(dist_vecr,prob);
+    ui->probaPlot->graph(0)->rescaleAxes();
+
+    ui->probaPlot->graph(1)->setData(dist_vecr,Fu);
+    ui->probaPlot->graph(1)->rescaleAxes();
+
+    ui->probaPlot->axisRect()->setupFullAxesBox();
+
+}
+
 
 QColor color(qreal power){
 

@@ -19,11 +19,11 @@ std::tuple< QList<Wall>, QList<Wall>, qreal, qreal> createStreetMap(qreal mapWid
     Wall diff2(95,20,115,0, 0,6);
 
     //building 3
-    Wall wall6(173 ,0  ,173 ,15 , 0.3, 4);
+    Wall wall6(175 ,0  ,175 ,15 , 0.3, 4);
     Wall wall7(253 ,15 ,253 ,0  , 0.3, 4);
-    Wall wall8(173 ,15 ,253 ,15 , 0.3, 4);
+    Wall wall8(175 ,15 ,253 ,15 , 0.3, 4);
     //Diffraction virtual wall = diagonal in building
-    Wall diff3(173,15,188,0, 0,6);
+    Wall diff3(175,15,188,0, 0,6);
 
     //building 4
     Wall wall9 (0  ,30 ,0  ,50 , 0.3, 4);
@@ -41,11 +41,11 @@ std::tuple< QList<Wall>, QList<Wall>, qreal, qreal> createStreetMap(qreal mapWid
     Wall diff6(145,50,165,30, 0,6);
 
     //building 6
-    Wall wall15(173 ,50 ,173 ,30  , 0.3, 5);
-    Wall wall16(173 ,30  ,253 ,30 , 0.3, 5);
+    Wall wall15(175 ,50 ,175 ,30  , 0.3, 5);
+    Wall wall16(175 ,30  ,253 ,30 , 0.3, 5);
     Wall wall17(253 ,30  ,253 ,50 , 0.3, 5);
     //Diffraction virtual wall = diagonal in building
-    Wall diff7(173,30,193,50, 0,6);
+    Wall diff7(175,30,193,50, 0,6);
 
     QList<Wall> walls{wall0, wall1, wall2,wall3,wall4,wall5,wall6,wall7,wall8,wall9,wall10,wall11,wall12,wall13,wall14,wall15,wall16,wall17};
     QList<Wall> diffr{diff0, diff1, diff2,diff3,diff4,diff5,diff6,diff7};

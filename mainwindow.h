@@ -28,6 +28,10 @@ public:
 
     QGraphicsScene *scene;
 
+private slots:
+    void makePathLossPlots(QVector<qreal> dist_vec, QVector<qreal> Prx_vec);
+    void makeCellRangePlot(qreal slope, qreal intercept, qreal sigma);
+
 private:
     Ui::MainWindow *ui;
       //qreal imageMethodColorMap(Mesh TX, Mesh RX, QList<Wall> walls, qreal scaleX, qreal scaleY);

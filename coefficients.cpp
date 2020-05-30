@@ -23,67 +23,67 @@ qreal theta_i(QLineF ray, QLineF wall){
 
 }
 
-complex<qreal> z_2(qreal eps_rel, qreal conduct){
-    // Returns the characteristic impedance of wall material
-    complex<qreal> eps_tild(eps_0*eps_rel, -(conduct/omega));
+//complex<qreal> z_2(qreal eps_rel, qreal conduct){
+//    // Returns the characteristic impedance of wall material
+//    complex<qreal> eps_tild(eps_0*eps_rel, -(conduct/omega));
 
-    return sqrt( mu_0 / eps_tild );
-}
+//    return sqrt( mu_0 / eps_tild );
+//}
 
-complex<qreal> gamma_m(qreal eps_rel, qreal sigma){
-    // Returns complex propagation constant of wall 'm'
-    // gamma_m = alpha + j*beta
+//complex<qreal> gamma_m(qreal eps_rel, qreal sigma){
+//    // Returns complex propagation constant of wall 'm'
+//    // gamma_m = alpha + j*beta
 
-    qreal a = omega*sqrt(mu_0*eps_0*eps_rel/2);
-    qreal b = sqrt(1 + pow( sigma/(omega*eps_0*eps_rel), 2));
+//    qreal a = omega*sqrt(mu_0*eps_0*eps_rel/2);
+//    qreal b = sqrt(1 + pow( sigma/(omega*eps_0*eps_rel), 2));
 
-    complex<qreal> gamma( (a * sqrt(b - 1)), (a * sqrt(b + 1)));
+//    complex<qreal> gamma( (a * sqrt(b - 1)), (a * sqrt(b + 1)));
 
-    return gamma;
-}
+//    return gamma;
+//}
 
-qreal theta_t_snell(qreal theta_i, qreal eps1, qreal eps_wall){
-    // Returns angle of transmission, calculated by Snell formula. Angle of transmission is needed to determine reflexion/transmission coefficients
-    // in perpendicular polarisation
+//qreal theta_t_snell(qreal theta_i, qreal eps1, qreal eps_wall){
+//    // Returns angle of transmission, calculated by Snell formula. Angle of transmission is needed to determine reflexion/transmission coefficients
+//    // in perpendicular polarisation
 
-    return asin( sqrt(eps1/eps_wall)*sin(theta_i) );
-}
+//    return asin( sqrt(eps1/eps_wall)*sin(theta_i) );
+//}
 
-qreal abs_tot_reflexion_coef(qreal theta_i, qreal eps_rel, qreal sigma, qreal thickness){
+//qreal abs_tot_reflexion_coef(qreal theta_i, qreal eps_rel, qreal sigma, qreal thickness){
 
-    qreal theta_t = theta_t_snell(theta_i, eps_0, eps_rel*eps_0); // angle of transmission
-    qreal s = thickness/cos(theta_t); // distance of propagation in wall (one way)
+//    qreal theta_t = theta_t_snell(theta_i, eps_0, eps_rel*eps_0); // angle of transmission
+//    qreal s = thickness/cos(theta_t); // distance of propagation in wall (one way)
 
-    qreal z1 = 377; //free space Characteritic impedance
-    complex<qreal> z2 = z_2(eps_rel, sigma); // characteristic impedance of wall material (COMPLEX)
+//    qreal z1 = 377; //free space Characteritic impedance
+//    complex<qreal> z2 = z_2(eps_rel, sigma); // characteristic impedance of wall material (COMPLEX)
 
-    complex<qreal> gamma = gamma_m(eps_rel, sigma); //constant of propagation (COMPLEX)
+//    complex<qreal> gamma = gamma_m(eps_rel, sigma); //constant of propagation (COMPLEX)
 
-    complex<qreal> perp_coef = (z2*cos(theta_i) - z1*cos(theta_t)) / (z2*cos(theta_i) + z1*cos(theta_t)); //reflexion coefficient perpendicular polarisation
+//    complex<qreal> perp_coef = (z2*cos(theta_i) - z1*cos(theta_t)) / (z2*cos(theta_i) + z1*cos(theta_t)); //reflexion coefficient perpendicular polarisation
 
-    complex<qreal> beta_2sin_sin(0 ,beta*2*s*sin(theta_t)*sin(theta_i) ); //used right below
-    complex<qreal> exp_part = exp(-gamma*s*2.0) * exp(beta_2sin_sin);  //exponential part of the total reflexion coefficient (see formula)
+//    complex<qreal> beta_2sin_sin(0 ,beta*2*s*sin(theta_t)*sin(theta_i) ); //used right below
+//    complex<qreal> exp_part = exp(-gamma*s*2.0) * exp(beta_2sin_sin);  //exponential part of the total reflexion coefficient (see formula)
 
-    return abs( perp_coef + (1.0-pow(perp_coef,2)) * (perp_coef*exp_part/(1.0-pow(perp_coef,2)*exp_part))  );
-}
+//    return abs( perp_coef + (1.0-pow(perp_coef,2)) * (perp_coef*exp_part/(1.0-pow(perp_coef,2)*exp_part))  );
+//}
 
-qreal abs_tot_transmission_coef(qreal theta_i, qreal eps_rel, qreal sigma, qreal thickness){
+//qreal abs_tot_transmission_coef(qreal theta_i, qreal eps_rel, qreal sigma, qreal thickness){
 
-    qreal theta_t = theta_t_snell(theta_i, eps_0, eps_rel*eps_0); // angle of transmission
-    qreal s = thickness/cos(theta_t); // distance of propagation in wall (one way)
+//    qreal theta_t = theta_t_snell(theta_i, eps_0, eps_rel*eps_0); // angle of transmission
+//    qreal s = thickness/cos(theta_t); // distance of propagation in wall (one way)
 
-    qreal z1 = 377; //free space Characteritic impedance
-    complex<qreal> z2 = z_2(eps_rel, sigma); // characteristic impedance of wall material (COMPLEX)
+//    qreal z1 = 377; //free space Characteritic impedance
+//    complex<qreal> z2 = z_2(eps_rel, sigma); // characteristic impedance of wall material (COMPLEX)
 
-    complex<qreal> gamma = gamma_m(eps_rel, sigma); //constant of propagation (COMPLEX)
+//    complex<qreal> gamma = gamma_m(eps_rel, sigma); //constant of propagation (COMPLEX)
 
-    complex<qreal> perp_coef = (z2*cos(theta_i) - z1*cos(theta_t)) / (z2*cos(theta_i) + z1*cos(theta_t)); //reflexion coefficient perpendicular polarisation
+//    complex<qreal> perp_coef = (z2*cos(theta_i) - z1*cos(theta_t)) / (z2*cos(theta_i) + z1*cos(theta_t)); //reflexion coefficient perpendicular polarisation
 
-    complex<qreal> beta_2sin_sin(0 ,beta*2*s*sin(theta_t)*sin(theta_i) ); //used right below
-    complex<qreal> exp_part = exp(-gamma*s*2.0) * exp(beta_2sin_sin);  //exponential part of the total reflexion coefficient (see formula)
+//    complex<qreal> beta_2sin_sin(0 ,beta*2*s*sin(theta_t)*sin(theta_i) ); //used right below
+//    complex<qreal> exp_part = exp(-gamma*s*2.0) * exp(beta_2sin_sin);  //exponential part of the total reflexion coefficient (see formula)
 
-    return abs( ((1.0-pow(perp_coef,2))*exp(-s*gamma)) / ((1.0-pow(perp_coef,2)*exp_part)));
-}
+//    return abs( ((1.0-pow(perp_coef,2))*exp(-s*gamma)) / ((1.0-pow(perp_coef,2)*exp_part)));
+//}
 
 qreal abs_reflexion_coef_wall(qreal theta_i, qreal eps_rel){
     //Compute reflexion coefficient, perpendicular case, for reflexions on walls (3.54)
