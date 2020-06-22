@@ -4,48 +4,48 @@ std::tuple< QList<Wall>, QList<Wall>, qreal, qreal> createStreetMap(qreal mapWid
     // Create map of a street for outdoor 5G raytracing
 
     //building 1
-    Wall wall0(80 ,0  ,80 ,20 ,0.3 ,5);
-    Wall wall1(80 ,20 ,0  ,20 ,0.3 ,5);
-    Wall wall2(0  ,0  ,0  ,20 ,0.3 ,5);
+    Wall wall0(80 ,0  ,80 ,29 ,0.3 ,5);
+    Wall wall1(80 ,29 ,0  ,29 ,0.3 ,5);
+    Wall wall2(0  ,0  ,0  ,29 ,0.3 ,5);
     //Diffraction virtual wall = diagonal in building
-    Wall diff0(80,20,60,0, 0,6);
+    Wall diff0(80,29,61,10, 0,6);
 
     //building 2
-    Wall wall3(95 ,0  ,95  ,20 ,0.3, 0);
-    Wall wall4(95 ,20 ,165 ,20 ,0.3, 0);
-    Wall wall5(165,20 ,165 ,0  ,0.3, 0);
+    Wall wall3(90 ,0  ,90  ,30 ,0.3, 0);
+    Wall wall4(90 ,30 ,160 ,30 ,0.3, 0);
+    Wall wall5(160,30 ,160 ,0  ,0.3, 0);
     //Diffraction virtual wall = diagonal in building
-    Wall diff1(145,0,165,20, 0,6);
-    Wall diff2(95,20,115,0, 0,6);
+    Wall diff1(140,10,160,30, 0,6);
+    Wall diff2(90,30,110,10, 0,6);
 
     //building 3
-    Wall wall6(175 ,0  ,175 ,15 , 0.3, 4);
-    Wall wall7(253 ,15 ,253 ,0  , 0.3, 4);
-    Wall wall8(175 ,15 ,253 ,15 , 0.3, 4);
+    Wall wall6(170 ,0  ,170 ,25 , 0.3, 4);
+    Wall wall7(250 ,25 ,250 ,0  , 0.3, 4);
+    Wall wall8(170 ,25 ,250 ,25 , 0.3, 4);
     //Diffraction virtual wall = diagonal in building
-    Wall diff3(175,15,188,0, 0,6);
+    Wall diff3(170,25,190,5, 0,6);
 
     //building 4
-    Wall wall9 (0  ,30 ,0  ,50 , 0.3, 4);
-    Wall wall10(0  ,30 ,80 ,30  , 0.3, 4);
-    Wall wall11(80 ,30 ,80 ,50 , 0.3, 4);
+    Wall wall9 (0  ,40 ,0  ,70 , 0.3, 4);
+    Wall wall10(0  ,40 ,80 ,40  , 0.3, 4);
+    Wall wall11(80 ,40 ,80 ,70 , 0.3, 4);
     //Diffraction virtual wall = diagonal in building
-    Wall diff4(60,50,80,30, 0,6);
+    Wall diff4(60,60,80,40, 0,6);
 
     //building 5
-    Wall wall12(95  ,50 ,95  ,30  , 0.3, 0);
-    Wall wall13(95  ,30  ,165 ,30  , 0.3, 0);
-    Wall wall14(165 ,30  ,165 ,50 , 0.3, 0);
+    Wall wall12(90  ,70 ,90  ,41  , 0.3, 0);
+    Wall wall13(90  ,41  ,160 ,41  , 0.3, 0);
+    Wall wall14(160 ,41  ,160 ,70 , 0.3, 0);
     //Diffraction virtual wall = diagonal in building
-    Wall diff5(95,30,115,50, 0,6);
-    Wall diff6(145,50,165,30, 0,6);
+    Wall diff5(95,41,109,60, 0,6);
+    Wall diff6(141,60,160,41, 0,6);
 
     //building 6
-    Wall wall15(175 ,50 ,175 ,30  , 0.3, 5);
-    Wall wall16(175 ,30  ,253 ,30 , 0.3, 5);
-    Wall wall17(253 ,30  ,253 ,50 , 0.3, 5);
+    Wall wall15(170 ,70 ,170 ,40  , 0.3, 5);
+    Wall wall16(170 ,40  ,250 ,40 , 0.3, 5);
+    Wall wall17(250 ,40  ,250 ,70 , 0.3, 5);
     //Diffraction virtual wall = diagonal in building
-    Wall diff7(175,30,193,50, 0,6);
+    Wall diff7(170,40,190,60, 0,6);
 
     QList<Wall> walls{wall0, wall1, wall2,wall3,wall4,wall5,wall6,wall7,wall8,wall9,wall10,wall11,wall12,wall13,wall14,wall15,wall16,wall17};
     QList<Wall> diffr{diff0, diff1, diff2,diff3,diff4,diff5,diff6,diff7};

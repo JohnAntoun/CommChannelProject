@@ -23,12 +23,12 @@ Wall::Wall(qreal x1, qreal y1=0, qreal x2=0, qreal y2=0, qreal thickness=0, int 
 
     case 4 : this->outlinePen.setColor(QColor(0,177,255,255)); //glass
              this->outlinePen.setWidth(3);
-             this->permittivity = 3.7; this->conductivity = 0.02;
+             this->permittivity = 3.3; this->conductivity = 0.02; //permittivity = 3.7
              break;
 
     case 5 : this->outlinePen.setColor(QColor(139,0,0,255));
              this->outlinePen.setWidth(3);
-             this->permittivity = 4.5; this->conductivity = 0.02;
+             this->permittivity = 4; this->conductivity = 0.02; //permittivity = 4.5
              break;
 
     case 6 : this->outlinePen.setColor(QColor(180,180,180,200)); //diffraction virtual wall

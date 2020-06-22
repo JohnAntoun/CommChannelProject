@@ -31,12 +31,15 @@ public:
 private slots:
     void makePathLossPlots(QVector<qreal> dist_vec, QVector<qreal> Prx_vec);
     void makeCellRangePlot(qreal slope, qreal intercept, qreal sigma);
+    void makeSpectrumPlot(QVector<qreal> freqs, QVector<qreal> attenuations, qreal speed);
+    void makeImpulseResponse(QVector<qreal> tau_vec, QVector<complex<qreal>> h_vec);
+    void makeTDLImpulseResponses(QVector<qreal> tau_vec, QVector<complex<qreal>> alpha_vec);
 
 private:
     Ui::MainWindow *ui;
       //qreal imageMethodColorMap(Mesh TX, Mesh RX, QList<Wall> walls, qreal scaleX, qreal scaleY);
       //qreal imageMethod2(Mesh TX, Mesh RX, QList<Wall> walls, qreal scaleX, qreal scaleY);
-      complex<qreal> imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QList<Wall> diffr,  qreal scaleX, qreal scaleY);
+      complex<qreal> imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QList<Wall> diffr,  qreal scaleX, qreal scaleY, QVector<qreal> RX_speed_vec);
       complex<qreal> imageMethod5GColorMap(Mesh TX, Mesh RX, QList<Wall> walls, QList<Wall> diffr);
 
       void draw_ray(QPointF A, QPointF B, int n_refl, qreal scaleX, qreal scaleY);

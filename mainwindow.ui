@@ -18,15 +18,45 @@
     <item>
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>3</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
-        <string>Power map</string>
+        <string>Main street map</string>
        </attribute>
        <layout class="QHBoxLayout" name="horizontalLayout_2">
         <item>
          <widget class="QGraphicsView" name="view"/>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tab_5">
+       <attribute name="title">
+        <string>Doppler spectrum</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_6">
+        <item>
+         <widget class="QCustomPlot" name="spectrumPlot" native="true"/>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tab_6">
+       <attribute name="title">
+        <string>Physical vs TDL impulse response</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_7">
+        <item>
+         <widget class="QCustomPlot" name="impulsePlot" native="true"/>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tab_7">
+       <attribute name="title">
+        <string>Physical vs US-TDL impulse response</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_8">
+        <item>
+         <widget class="QCustomPlot" name="USimpulsePlot" native="true"/>
         </item>
        </layout>
       </widget>
@@ -52,11 +82,11 @@
       </widget>
       <widget class="QWidget" name="tab_4">
        <attribute name="title">
-        <string>Page</string>
+        <string>Margin vs whole cell coverage </string>
        </attribute>
        <layout class="QHBoxLayout" name="horizontalLayout_5">
         <item>
-         <widget class="QCustomPlot" name="wholeProbaPlot" native="true"/>
+         <widget class="QCustomPlot" name="wholeCellPlot" native="true"/>
         </item>
        </layout>
       </widget>

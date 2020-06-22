@@ -16,14 +16,18 @@ bool isNotOnWall(QPointF A, QLineF wall);
 bool checkLOS(QPointF A, QPointF B, QList<Wall> walls);
 qreal dist_point_line(QLineF line, QPointF p);
 bool isObtuseAngle(QLineF BA, QLineF BC);
+qreal v_cos_product(QVector<qreal> v, QLineF ray);
+complex<qreal> phase_tau(qreal tau);
+void printSideStreetsCoverage(QVector<qreal> street1, QVector<qreal> street2, QVector<qreal> street3, QVector<qreal> street4);
 
 QColor color(qreal power);
 const qreal mapWidth =1340, mapHeigth = 640;
 
 //Channel parameters
 const qreal frequency = 26*pow(10,9);
-const qreal beta = (2*pi*frequency)/(3*pow(10,8));
-const qreal he = 3*pow(10,8)/(frequency*pi); // he = lambda/pi = c/(f*pi)
+const qreal c = 3*pow(10,8); // speed of light m/s
+const qreal beta = (2*pi*frequency)/c;
+const qreal he = c/(frequency*pi); // he = lambda/pi = c/(f*pi)
 const qreal Ra = 71;
 const qreal EIRPmax = 2; //Watts
 const qreal Gtx = 16/(3*pi);
@@ -31,19 +35,23 @@ const qreal Ptx = EIRPmax/Gtx; //Watts
 const qreal Ptx_dBm = 10 * log10(Ptx/0.001);
 
 //Link Budget
-const qreal SNR = 8; //dB
+const qreal target_SNR = 8; //dB
 const qreal R_noise_fig = 10; //dB
 const qreal interference_margin = 6; //dB
 const qreal Bmax = 200*pow(10,6); // max bandwidth 200MHz
 const qreal thermal_noise = 10*log10(k_boltz*290*Bmax/0.001); //dBm
-const qreal loss = (SNR+R_noise_fig+interference_margin+thermal_noise);
+
+const qreal min_Prx = (target_SNR+R_noise_fig+interference_margin+thermal_noise);
+const qreal receiver_sensitivity = thermal_noise+target_SNR+R_noise_fig;
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    qDebug() << "loss " <<loss;
+//    qDebug() << "min_Prx  " <<min_Prx ;
+//    qDebug() << "Receiver sensitivity " <<receiver_sensitivity;
+
     scene = new QGraphicsScene(this);
     ui->view->setRenderHints(QPainter::Antialiasing);
     ui->view->setScene(scene);
@@ -57,24 +65,28 @@ MainWindow::MainWindow(QWidget *parent) :
                                                                                // diffr,scaling factors
     scaleY = scaleX;
 
-    //small exemple, see exercise session 3 knife edge - place T and R accordingly
-//    Wall wall0(100 ,50 ,100 , 71.5, 0.3, 5);
-//    diffr.append(wall0); walls.append(wall0); //the wall of this exemple will be both for reflection and diffraction
+////    //small exemples;
+
+//    //THESE TWO FOR WALLS AND GROUND REFLECTION FROM REPORT
+//    //    Wall wall0(0 ,10, 90  , 10, 0.3, 5);
+//    //    Wall wall1(0 ,15 ,90 ,  15, 0.3, 5);
+
+//    //THESE FOR DIFFRACTION EXAMPLE
+//        Wall wall0(0 ,10, 90  , 10, 0.3, 5);
+//        Wall wall1(90 ,10 ,90 ,  20, 0.3, 5);
+//        Wall diff0(90 ,10 ,80 , 20 , 0, 6);
+
+//    diffr.append(diff0);
+//    walls.append(wall0); walls.append(wall1); //the wall of this exemple will be both for reflection and diffraction
 //    scaleX = mapWidth/150;
-//    scaleY = mapHeigth/150;
-//        qDebug() << "Ptx = " <<Ptx;
-//    ui->view->scene()->addLine(QLineF(diffr[0].p1().x()*scaleX,
-//                                      diffr[0].p1().y()*scaleY,
-//                                      diffr[0].p2().x()*scaleX,
-//                                      diffr[0].p2().y()*scaleY), diffr[0].outlinePen);
+//    scaleY = scaleX;
 
 
     QPen meshOutline(Qt::black);
-    Mesh transmitter(45, 22, 5, 5, 0);
-    //Mesh receiver(174, 14, 5 ,5 ,1);
+    Mesh transmitter(200, 39, 5, 5, 0);
+    //Mesh receiver(85, 55, 5 ,5 ,1);
     ui->view->scene()->addRect(QRectF((transmitter.centerX*scaleX)-transmitter.width()/2, (transmitter.centerY*scaleY)-transmitter.height()/2, transmitter.width(), transmitter.height()), meshOutline, transmitter.brush);
     //ui->view->scene()->addRect(QRectF((receiver.centerX*scaleX)-receiver.width()/2, (receiver.centerY*scaleY)-receiver.height()/2, receiver.width(), receiver.height()), meshOutline, receiver.brush);
-
 
     qreal Prx = 0, Prx_dBm = 0;
     complex<qreal> sum = 0;
@@ -85,11 +97,16 @@ MainWindow::MainWindow(QWidget *parent) :
     int idx = 0;
     QPointF T=transmitter.center(), R;
 
-    //launch color map from here, treat each meter square as a receiver antenna, comment this section and uncomment next section to display rays for a specific receiver
-    for (int w =0; w<(253/resolution); w++){
-        for(int h=0; h<(50/resolution); h++){
+    QVector<qreal> street1_pow,street2_pow,street3_pow,street4_pow; //for side streets depth, each element will contain
+                                                                    // average power over a horizontal section
+    int x1=0,x2=0,x3=0,x4=0,y1=0,y2=0,y3=0,y4=0;
+    qreal pow1=0,pow2=0,pow3=0,pow4=0;
 
-            if((w*resolution<80 && h*resolution<20) || (w*resolution>=95 && w*resolution<165 && h*resolution<20) || (w*resolution>=175 && h*resolution<15) || (w*resolution<80 && h*resolution>=30) || (w*resolution>=95 && w*resolution<165 && h*resolution>=30) || (w*resolution>=175 && h*resolution>=30) ){
+    //launch color map from here, treat each meter square as a receiver antenna, comment this section and uncomment next section to display rays for a specific receiver
+    for (int h=0; h<(70/resolution); h++){
+        for(int w =0; w<(253/resolution); w++){
+
+            if((w*resolution<80 && h*resolution<29) || (w*resolution>=90 && w*resolution<160 && h*resolution<30) || (w*resolution>=170 && h*resolution<25) || (w*resolution<80 && h*resolution>=40) || (w*resolution>=90 && w*resolution<160 && h*resolution>=41) || (w*resolution>=170 && h*resolution>=40) ){
             //do nothing...
             }
             else{
@@ -104,27 +121,63 @@ MainWindow::MainWindow(QWidget *parent) :
                 receiver.brush.setColor( color(Prx_dBm));
                 ui->view->scene()->addRect(QRectF((receiver.centerX*scaleX)-receiver.width()/2, (receiver.centerY*scaleY)-receiver.height()/2, receiver.width(), receiver.height()), meshOutline, receiver.brush);
 
-                if(QLineF(T,R).length() > 10  && h<30 && h>=20){
+                if(QLineF(T,R).length() > 10  && h*resolution<40 && h*resolution>=30){
                     dist.insert(idx, log10(QLineF(T,R).length()) );
                     qDebug() << dist[idx] << " " << Prx_dBm;
                     P_rx_vec.insert(idx, Prx_dBm);
                     idx++;
                 }
+
+                //First street depth
+                if( w*resolution >= 80 && w*resolution < 90 && h*resolution < 30 ){
+                    pow1 += Prx_dBm;
+                    x1++;
+                    if(x1 ==9){ street1_pow.insert(y1, pow1/10); } //take average over horizontal section
+                }
+
+                //Second street depth
+                if( w*resolution >= 160 && w*resolution < 170 && h*resolution < 30 ){
+                    pow2 += Prx_dBm;
+                    x2++;
+                    if(x2 ==9){ street2_pow.insert(y2, pow2/10); } //take average over horizontal section
+                }
+
+                //Third street depth
+                if( w*resolution >= 80 && w*resolution < 90 && h*resolution > 40 ){
+                    pow3 += Prx_dBm;
+                    x3++;
+                    if(x3 ==9){ street3_pow.insert((y3-41), pow3/10); } //take average over horizontal section
+                }
+
+                //Four street depth
+                if( w*resolution >= 160 && w*resolution < 170 && h*resolution > 40 ){
+                    pow4 += Prx_dBm;
+                    x4++;
+                    if(x4 ==9){ street4_pow.insert((y4-41), pow4/10); } //take average over horizontal section
+                }
+
             }
         }
+        pow1=0; x1=0; y1++;
+        pow2=0; x2=0; y2++;
+        pow3=0; x3=0; y3++;
+        pow4=0; x4=0; y4++;
     }
+
     makePathLossPlots(dist, P_rx_vec); //Plot the path loss
+    printSideStreetsCoverage(street1_pow,street2_pow,street3_pow,street4_pow);
+
+
 
 //    //DISPLAY RAYS FOR SPECIFIC RECEIVER (uncomment below to make it happen), don't forget to place receiver (line 57)
 //    //visualize a ray tracing from here
-//    sum = imageMethod5G(transmitter, receiver, walls, diffr, scaleX, scaleY); // computation of the sum in the power computation formula
-//    qDebug() << "sum = " << sum.real() << " + i" << sum.imag();
-//    qDebug() << "K = " << pow(he,2)*60*Gtx*Ptx/ (8*Ra);
+//    QVector<qreal> receiver_speed = {0,-13.88}; //meters per second
+//    sum = imageMethod5G(transmitter, receiver, walls, diffr, scaleX, scaleY, receiver_speed); // computation of the sum in the power computation formula
 //    Prx = pow(he,2)*60*Gtx*Ptx * pow(abs(sum),2) / (8*Ra); //EQUATION 3.51
-//    qDebug() << "Prx = " << Prx;
+//    qreal SNR = 10*log10(Prx)-R_noise_fig-thermal_noise; //eq 3.79
+//    qDebug() << "SNR = " << SNR << "dB";
 //    Prx_dBm = 10 * log10( Prx/ 0.001);
-//    qDebug() << Prx_dBm << "dBm";
-
+//    qDebug() << "Prx_dBm = " << Prx_dBm << "dBm";
 
     //DRAW WALLS
     // Rem: drawing walls at the end make them appear more clearly on the final display
@@ -148,7 +201,17 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-complex<qreal> MainWindow::imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QList<Wall> diffr, qreal scaleX, qreal scaleY){
+
+
+/* FIND ALL USEFUL FUNCTIONS BELOW
+ * /////////////////////////////////////////////
+ *
+ * /////////////////////////////////////////////
+*/
+
+
+
+complex<qreal> MainWindow::imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QList<Wall> diffr, qreal scaleX, qreal scaleY, QVector<qreal> RX_speed_vec){
 
     QPointF R = RX.center(); QPointF T = TX.center(); qreal d_los = QLineF(T,R).length();
     qreal eps_gnd = 5; //ground permittivity
@@ -158,19 +221,50 @@ complex<qreal> MainWindow::imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QL
                              // as soon as needed information is gathered to compute a new term.
     qreal d2; //distance of rays, to be updated and reused for each ray
 
+    complex<qreal>alpha_n;
+
+    qreal tau;
+    QVector<qreal> tau_vector ;
+    QVector<complex<qreal>> alpha_n_vector;
+
+    QVector<qreal> spectrum_freqs;
+    QVector<qreal> spectrum_attenuations;
+    qreal v_abs = sqrt(pow(RX_speed_vec[0],2)+pow(RX_speed_vec[1],2)); //receiver speed absolute value
 
     //STEP 1) start by direct wave if in line of sigth (=LOS) or else compute diffraction
     if(checkLOS(T,R,walls) && checkLOS(T,R,diffr)){
         draw_ray(R,T,0, scaleX, scaleY);
-        sum += phase(beta,d_los)/QLineF(R,T).length(); //direct wave
+       alpha_n = phase(beta,d_los)/QLineF(R,T).length();
+        sum +=alpha_n; //direct wave
+        tau = d_los/c;
+        alpha_n_vector.append(alpha_n);
+        tau_vector.append(tau);
+        spectrum_freqs.append( 2*pi*beta * v_cos_product(RX_speed_vec, QLineF(T,R) ) );
+        spectrum_attenuations.append(abs(alpha_n));
 
         d2 = sqrt(pow(TX.antennaH+RX.antennaH,2)+pow(d_los,2)); //d2 for reflection on ground eq.3.7
-        sum += phase(beta,d2)*abs_reflexion_coef_ground(TX.antennaH, RX.antennaH, d_los, eps_gnd)/d2; //see eq. 3.7 last arg=5 is for ground permitivity
+        tau = d2/c;
+
+        qreal th_i = pi - qAtan(d_los/(TX.antennaH+RX.antennaH)); //compute angle of impact on receiver for effective height correction
+       alpha_n = phase(beta,d2)*reflexion_coef_ground(TX.antennaH, RX.antennaH, d_los, eps_gnd)*cos((pi/2)*cos(th_i)) / ( d2*pow(sin(th_i),2) );
+
+        sum +=alpha_n; //see eq. 3.7 last arg=5 is for ground permitivity
+        alpha_n_vector.append(alpha_n); // Impulse response
+        tau_vector.append(tau);
+
+        qreal signV = v_cos_product(RX_speed_vec, QLineF(T,R)); //get sign of the frequency shift that is the sane than for the direct wave
+        if(signV<0){
+            spectrum_freqs.append( -1*2*pi*beta * v_abs * cos( atan(RX.antennaH/(d_los/2) )) );
+        }
+        else{
+            spectrum_freqs.append( 2*pi*beta * v_abs * cos( atan(RX.antennaH/(d_los/2) )) );
+        }
+        spectrum_attenuations.append(abs(alpha_n));
     }
 
     else{ //if not LOS -> d iffraction
         QPointF inters;
-        qreal dr, v, fresnel2,d12,s12;
+        qreal dr, v, fresnel2_dB,fresnel,d12,s12;
 
         //check which diffraction walls are obstacle and take the closest one
         for(int m=0; m<diffr.size(); m++){
@@ -182,19 +276,24 @@ complex<qreal> MainWindow::imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QL
                 draw_ray(R,diffr[m].p1(),0,scaleX,scaleY);
 
                 diffr[m].intersect(QLineF(T,R), &inters); //get intersection between TR line and diffraction wall
-                d12 = dist_point_line(diffr[m],T)+dist_point_line(diffr[m],R);
-                s12 = QLineF(T,diffr[m].p1()).length() + QLineF(R,diffr[m].p1()).length();
-                //qDebug() << "d1 = " << QLineF(T,inters).length();
-                //qDebug() << "d12 = " << d12;
-                //qDebug() << "s12 = " << s12;
+                d12 = d_los;
+                s12 = QLineF(T,diffr[m].p1()).length() + QLineF(R,diffr[m].p1()).length(); //real path taken by wave
+
                 dr = s12 - d12; //see delata_r eq 3.56 of course
-                //qDebug() << "dr = " << dr;
+
                 v = sqrt( (2*beta*dr)/pi  ); //see eq 3.57
-                fresnel2 = 1 /(( sqrt( pow(v-0.1,2)+1 ) + v-0.1 )*2.2131); //fresnel coef squarred (in not dB!), eq 3.58
-                complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
-                //see eq. 3.43
-                //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
-                sum += phase(beta,s12)*phase_arg_fresnel*sqrt(fresnel2)/s12; // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
+                fresnel2_dB = -6.9-20*log10(sqrt( pow(v-0.1,2)+1 ) + v-0.1 ); //, eq 3.58
+                fresnel = pow(10,fresnel2_dB/20); //fresnel coef  (in not dB!)
+                complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), sin(-(pi/4)-(pi/2)*pow(v,2)) );
+
+               alpha_n = phase(beta,s12)*phase_arg_fresnel*fresnel/s12;
+                sum +=alpha_n;
+                tau = s12/c;
+                alpha_n_vector.append(alpha_n);
+                tau_vector.append(tau);
+
+                spectrum_freqs.append( 2*pi*beta * v_cos_product(RX_speed_vec, QLineF(diffr[m].p1(),R) ) );
+                spectrum_attenuations.append(abs(alpha_n));
             }
 
 
@@ -204,19 +303,24 @@ complex<qreal> MainWindow::imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QL
                 draw_ray(R,diffr[m].p2(),0,scaleX,scaleY);
 
                 diffr[m].intersect(QLineF(T,R), &inters); //get intersection between TR line and diffraction wall
-                d12 = dist_point_line(diffr[m],T)+dist_point_line(diffr[m],R);
-                s12 = QLineF(T,diffr[m].p2()).length() + QLineF(R,diffr[m].p2()).length();
-                //qDebug() << "d1 = " << QLineF(T,inters).length();
-                //qDebug() << "d12 = " << d12;
-                //qDebug() << "s12 = " << s12;
+                d12 = d_los;
+                s12 = QLineF(T,diffr[m].p2()).length() + QLineF(R,diffr[m].p2()).length(); //real path taken by wave
+
                 dr = s12 - d12; //see delata_r eq 3.56 of course
-                //qDebug() << "dr = " << dr;
+
                 v = sqrt( (2*beta*dr)/pi  ); //see eq 3.57
-                fresnel2 = 1 /(( sqrt( pow(v-0.1,2)+1 ) + v-0.1 )*2.2131); //fresnel coef squarred (in not dB!), eq 3.58
-                complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
-                //see eq. 3.43
-                //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
-                sum += phase(beta,s12)*phase_arg_fresnel*sqrt(fresnel2)/s12; // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
+                fresnel2_dB = -6.9-20*log10(sqrt( pow(v-0.1,2)+1 ) + v-0.1 ); //, eq 3.58
+                fresnel = pow(10,fresnel2_dB/20); //fresnel coef  (in not dB!)
+                complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), sin(-(pi/4)-(pi/2)*pow(v,2)) );
+
+               alpha_n = phase(beta,s12)*phase_arg_fresnel*fresnel/s12;
+                sum +=alpha_n;
+                tau = s12/c;
+                alpha_n_vector.append(alpha_n);
+                tau_vector.append(tau);
+
+                spectrum_freqs.append( 2*pi*beta * v_cos_product(RX_speed_vec, QLineF(diffr[m].p2(),R) ) );
+                spectrum_attenuations.append(abs(alpha_n));
             }
         }
     }
@@ -235,8 +339,16 @@ complex<qreal> MainWindow::imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QL
 
             if(checkLOS(R,r0,walls) && checkLOS(r0,T,walls)){
                 d2 = QLineF(m_list[0],R).length();
-                sum  +=   phase(beta,d2) * reflexion_coef(T,r0,walls[i]) / d2; // one reflexion term
+               alpha_n = phase(beta,d2) * reflexion_coef(T,r0,walls[i]) / d2;
+                sum +=alpha_n; // one reflexion term
                 draw_ray(T,r0,1, scaleX, scaleY); draw_ray(R,r0,1, scaleX, scaleY);
+
+                tau = d2/c;
+                alpha_n_vector.append(alpha_n); /////////////////////////////////////////
+                tau_vector.append(tau); ////////////////////////////////////////
+
+                spectrum_freqs.append( 2*pi*beta * v_cos_product(RX_speed_vec, QLineF(r0,R) ) );
+                spectrum_attenuations.append(abs(alpha_n));
             }
         }
 
@@ -252,9 +364,16 @@ complex<qreal> MainWindow::imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QL
 
                     if(a == 1 && checkLOS(R,r1,walls) && checkLOS(r1,r0,walls) && checkLOS(r0,T,walls)){
                         d2 = QLineF(m_list[1],R).length();
-                        sum += phase(beta,d2) * reflexion_coef(R,r1, walls[j]) * reflexion_coef(r1,r0,walls[i]) / d2;
-
+                       alpha_n = phase(beta,d2) * reflexion_coef(R,r1, walls[j]) * reflexion_coef(r1,r0,walls[i]) / d2;
+                        sum +=alpha_n;
                         draw_ray(R,r1,2, scaleX, scaleY); draw_ray(r1,r0,2, scaleX, scaleY); draw_ray(r0,T,2, scaleX, scaleY);
+
+                        tau = d2/c;
+                        alpha_n_vector.append(alpha_n); /////////////////////////////////////////
+                        tau_vector.append(tau); ////////////////////////////////////////
+
+                        spectrum_freqs.append( 2*pi*beta * v_cos_product(RX_speed_vec, QLineF(r1,R) ) );
+                        spectrum_attenuations.append(abs(alpha_n));
                     }
                 }
 
@@ -271,10 +390,17 @@ complex<qreal> MainWindow::imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QL
                             if(a==1 && b==1
                                     && checkLOS(R,r2,walls) && checkLOS(r2,r1,walls) && checkLOS(r1,r0,walls) && checkLOS(r0,T,walls)){
                                 d2 = QLineF(m_list[2],R).length();
-                                sum += phase(beta,d2) * reflexion_coef(R,r2, walls[k]) * reflexion_coef(r2,r1,walls[j]) * reflexion_coef(r1,r0,walls[i]) / d2;
+                               alpha_n = phase(beta,d2) * reflexion_coef(R,r2, walls[k]) * reflexion_coef(r2,r1,walls[j]) * reflexion_coef(r1,r0,walls[i]) / d2;
+                                sum +=alpha_n;
+
+                                tau = d2/c;
+                                alpha_n_vector.append(alpha_n); /////////////////////////////////////////
+                                tau_vector.append(tau); ////////////////////////////////////////
 
                                 draw_ray(R,r2,3, scaleX, scaleY); draw_ray(r2,r1,3, scaleX, scaleY);draw_ray(r1,r0,3, scaleX, scaleY);
                                 draw_ray(r0,T,3, scaleX, scaleY);
+                                spectrum_freqs.append( 2*pi*beta * v_cos_product(RX_speed_vec, QLineF(r2,R) ) );
+                                spectrum_attenuations.append(abs(alpha_n));
                             }
                         }
                 }
@@ -283,13 +409,17 @@ complex<qreal> MainWindow::imageMethod5G(Mesh TX, Mesh RX, QList<Wall> walls, QL
 
     }
 
+    makeImpulseResponse(tau_vector, alpha_n_vector);
+    makeTDLImpulseResponses(tau_vector, alpha_n_vector);
+    makeSpectrumPlot(spectrum_freqs, spectrum_attenuations, v_abs);
+
     return sum;
 }
 
 
 complex<qreal> MainWindow::imageMethod5GColorMap(Mesh TX, Mesh RX, QList<Wall> walls, QList<Wall> diffr){
-    // REMARK: ONLY DIFFERENCE FROM imageMethod5G AND imageMethod5GColorMap is that color map does not trace rays, to understand the process
-    // read imageMethod5G and comments
+    // REMARK: ONLY DIFFERENCE FROM imageMethod5G AND imageMethod5GColorMap is that color map does not trace rays and does not
+    // make vectors intended to plot impulse responses. To understand the process steps in details, read imageMethod5G and comments
 
     QPointF R = RX.center(); QPointF T = TX.center(); qreal d_los = QLineF(T,R).length();
     qreal eps_gnd = 5; //ground permittivity
@@ -304,11 +434,13 @@ complex<qreal> MainWindow::imageMethod5GColorMap(Mesh TX, Mesh RX, QList<Wall> w
         sum += phase(beta,d_los)/QLineF(R,T).length(); //direct wave
 
         d2 = sqrt(pow(TX.antennaH+RX.antennaH,2)+pow(d_los,2)); //d2 for reflection on ground eq.3.7
-        sum += phase(beta,d2)*abs_reflexion_coef_ground(TX.antennaH, RX.antennaH, d_los, eps_gnd)/d2; //see eq. 3.7 last arg=5 is for ground permitivity
+        qreal th_i = pi - qAtan(d_los/(TX.antennaH+RX.antennaH)); //compute angle of impact on receiver for effective height correction
+        sum += phase(beta,d2)*reflexion_coef_ground(TX.antennaH, RX.antennaH, d_los, eps_gnd)*cos((pi/2)*cos(th_i)) / ( d2*pow(sin(th_i),2) ); //see eq. 3.22
+                                                                                    //last eps_gnd is for ground permitivity
     }
     else{ //if not LOS -> diffraction
         QPointF inters;
-        qreal dr, v, fresnel2,d12,s12;
+        qreal dr, v, fresnel2_dB, fresnel,d12,s12;
 
         //check which diffraction walls are obstacle and take the closest one
         for(int m=0; m<diffr.size(); m++){
@@ -318,19 +450,17 @@ complex<qreal> MainWindow::imageMethod5GColorMap(Mesh TX, Mesh RX, QList<Wall> w
             if(diffr[m].intersect(QLineF(T,R), &inters)==1 && checkLOS(R,diffr[m].p1(),walls) && checkLOS(T,diffr[m].p1(),walls) ){
 
                 diffr[m].intersect(QLineF(T,R), &inters); //get intersection between TR line and diffraction wall
-                d12 = dist_point_line(diffr[m],T)+dist_point_line(diffr[m],R);
-                s12 = QLineF(T,diffr[m].p1()).length() + QLineF(R,diffr[m].p1()).length();
-                //qDebug() << "d1 = " << QLineF(T,inters).length();
-                //qDebug() << "d12 = " << d12;
-                //qDebug() << "s12 = " << s12;
+                d12 = d_los;
+                s12 = QLineF(T,diffr[m].p1()).length() + QLineF(R,diffr[m].p1()).length(); //real path taken by wave
+
                 dr = s12 - d12; //see delata_r eq 3.56 of course
-                //qDebug() << "dr = " << dr;
+
                 v = sqrt( (2*beta*dr)/pi  ); //see eq 3.57
-                fresnel2 = 1 /(( sqrt( pow(v-0.1,2)+1 ) + v-0.1 )*2.2131); //fresnel coef squarred (in not dB!), eq 3.58
-                complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
-                //see eq. 3.43
-                //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
-                sum += phase(beta,s12)*phase_arg_fresnel*sqrt(fresnel2)/s12; // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
+                fresnel2_dB = -6.9-20*log10(sqrt( pow(v-0.1,2)+1 ) + v-0.1 ); //, eq 3.58
+                fresnel = pow(10,fresnel2_dB/20); //fresnel coef  (in not dB!)
+                complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), sin(-(pi/4)-(pi/2)*pow(v,2)) );
+
+                sum += phase(beta,s12)*phase_arg_fresnel*fresnel/s12;
             }
 
 
@@ -338,19 +468,17 @@ complex<qreal> MainWindow::imageMethod5GColorMap(Mesh TX, Mesh RX, QList<Wall> w
             if(diffr[m].intersect(QLineF(T,R), &inters)==1 && checkLOS(R,diffr[m].p2(),walls) && checkLOS(T,diffr[m].p2(),walls)){
 
                 diffr[m].intersect(QLineF(T,R), &inters); //get intersection between TR line and diffraction wall
-                d12 = dist_point_line(diffr[m],T)+dist_point_line(diffr[m],R);
-                s12 = QLineF(T,diffr[m].p2()).length() + QLineF(R,diffr[m].p2()).length();
-                //qDebug() << "d1 = " << QLineF(T,inters).length();
-                //qDebug() << "d12 = " << d12;
-                //qDebug() << "s12 = " << s12;
+                d12 = d_los;
+                s12 = QLineF(T,diffr[m].p2()).length() + QLineF(R,diffr[m].p2()).length(); //real path taken by wave
+
                 dr = s12 - d12; //see delata_r eq 3.56 of course
-                //qDebug() << "dr = " << dr;
+
                 v = sqrt( (2*beta*dr)/pi  ); //see eq 3.57
-                fresnel2 = 1 /(( sqrt( pow(v-0.1,2)+1 ) + v-0.1 )*2.2131); //fresnel coef squarred (in not dB!), eq 3.58
-                complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), -sin(-(pi/4)-(pi/2)*pow(v,2)) );
-                //see eq. 3.43
-                //qDebug() << "v = "<< v << "; Fv2 = " << fresnel2;
-                sum += phase(beta,s12)*phase_arg_fresnel*sqrt(fresnel2)/s12; // |E| = E*fresnel/sqrt(d) <-> |E| = E * sqrt(fresnel2/d);
+                fresnel2_dB = -6.9-20*log10(sqrt( pow(v-0.1,2)+1 ) + v-0.1 ); //, eq 3.58
+                fresnel = pow(10,fresnel2_dB/20); //fresnel coef  (in not dB!)
+                complex<qreal> phase_arg_fresnel( cos(-(pi/4)-(pi/2)*pow(v,2)), sin(-(pi/4)-(pi/2)*pow(v,2)) );
+
+                sum += phase(beta,s12)*phase_arg_fresnel*fresnel/s12;
             }
         }
     }
@@ -465,7 +593,7 @@ qreal MainWindow :: reflexion_coef(QPointF A, QPointF B, Wall wall){
 
     else{
         qreal thetai = theta_i( QLineF(A,B),wall);
-        return abs_reflexion_coef_wall(thetai, wall.permittivity);
+        return reflexion_coef_wall(thetai, wall.permittivity);
     }
 }
 
@@ -537,6 +665,49 @@ bool isObtuseAngle(QLineF BA, QLineF BC){
     return (( (BA.dx())*(BC.dx()) + (BA.dy())*(BC.dy())  ) < 0 );
 }
 
+qreal v_cos_product(QVector<qreal> v, QLineF ray){
+    //Computes the v*cos(theta) product of equation 4.21 of the lecture notes by doing dot product v.ray and isolating v*cos(theta)
+    //NOTE that the cos of the dot product is the opposite of the cos desired for eq. 4.21
+    return - (v[0]*ray.dx()+v[1]*ray.dy()) / ray.length();
+}
+
+void printSideStreetsCoverage(QVector<qreal> street1, QVector<qreal> street2, QVector<qreal> street3, QVector<qreal> street4){
+
+    qreal depth=0;
+    for(int d = street1.size()-1; d>=0; d--){
+        if(street1[d]<min_Prx ){
+            depth = 30-d;
+            qDebug() << "Street n°1 depth = " << depth-1 << "m";
+            break;
+        }
+    }
+
+    for(int d = street2.size()-1; d>=0; d--){
+        if(street2[d]<min_Prx ){
+            depth = 30-d;
+            qDebug() << "Street n°2 depth = " << depth-1 << "m";
+            break;
+        }
+    }
+
+    for(int d = 0; d<street3.size(); d++){
+        if(street3[d]<min_Prx ){
+            depth = d;
+            qDebug() << "Street n°3 depth = " << depth-1 << "m";
+            break;
+        }
+    }
+
+    for(int d = 0; d<street4.size(); d++){
+        if(street4[d]<min_Prx ){
+            depth = d;
+            qDebug() << "Street n°4 depth = " << depth-1 << "m";
+            break;
+        }
+    }
+
+}
+
 void MainWindow::makePathLossPlots(QVector<qreal> dist_vec, QVector<qreal> Prx_vec){
 
     // --- FOLLOWING CODE IS LEAST SQURE REGRESSION LINE ALGORITHM FOUND HERE: https://www.bragitoff.com/2015/09/c-program-to-linear-fit-the-data-using-least-squares-method/
@@ -567,30 +738,50 @@ void MainWindow::makePathLossPlots(QVector<qreal> dist_vec, QVector<qreal> Prx_v
     qDebug() << "y = " << a << " * x + " << b;
     qDebug() << "std_dev = " << std_dev;
 
-    //    ui->customPlot->legend->setVisible(true);
-    //    ui->customPlot->legend->setFont(QFont("Helvetica",9));
-    //    // set locale to english, so we get english decimal separator:
-    //    ui->customPlot->setLocale(QLocale(QLocale::English, QLocale::UnitedKingdom));
+        // set title of plot:
+        ui->customPlot->plotLayout()->insertRow(0);
+        ui->customPlot->plotLayout()->addElement(0, 0, new QCPTextElement(ui->customPlot, "Received power", QFont("sans", 12, QFont::Bold)));
+
+        //LEGEND
+        ui->customPlot->legend->setVisible(true);
+        ui->customPlot->legend->setFont(QFont("Helvetica",12));
+        // set locale to english, so we get english decimal separator:
+        ui->customPlot->setLocale(QLocale(QLocale::English, QLocale::UnitedKingdom));
 
         // add data point graph:
+        QPen penRed(Qt::red);
+        penRed.setWidth(2);
         ui->customPlot->addGraph();
         ui->customPlot->graph(0)->setPen(QPen(Qt::blue));
         ui->customPlot->graph(0)->setLineStyle(QCPGraph::lsNone);
         ui->customPlot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCross, 4));
+        ui->customPlot->graph(0)->setName("Received power");
 
         ui->customPlot->addGraph();
-        ui->customPlot->graph(1)->setPen(QPen(Qt::red));
-        //ui->customPlot->graph(0)->setLineStyle(QCPGraph::lsNone);
-        //ui->customPlot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCross, 4));
-
+        ui->customPlot->graph(1)->setPen(penRed);
+        ui->customPlot->graph(1)->setName("Received power (linear regression)");
 
         // pass data to graphs and let QCustomPlot determine the axes ranges so the whole thing is visible:
         ui->customPlot->graph(0)->setData(dist_vec, Prx_vec);
-        ui->customPlot->graph(0)->rescaleAxes();
+        //ui->customPlot->graph(0)->rescaleAxes();
         ui->customPlot->graph(1)->setData(dist_vec, Prx_fit);
         ui->customPlot->graph(1)->rescaleAxes();
 
+        QFont pfont("Newyork",12);
+        pfont.setStyleHint(QFont::SansSerif);
+        pfont.setPointSize(12);
+
+        ui->customPlot->xAxis->setLabel("log(d)");
+        ui->customPlot->yAxis->setLabel("Prx_dBm");
+        ui->customPlot->xAxis->setLabelFont(pfont);
+        ui->customPlot->yAxis->setLabelFont(pfont);
+        ui->customPlot->xAxis->setRange(1, 2.5);
+        ui->customPlot->yAxis->setRange(-40, -100);
+
         ui->customPlot->axisRect()->setupFullAxesBox();
+
+        ui->customPlot->setInteraction(QCP::iRangeDrag, true);
+        ui->customPlot->setInteraction(QCP::iRangeZoom, true);
 
         makeCellRangePlot(a,b,std_dev);
 }
@@ -602,25 +793,45 @@ void MainWindow::makeCellRangePlot(qreal slope, qreal intercept, qreal sigma){
     // P[L(r) < Lm] = P[ L_sigma < ( Lm-avg_L(r) ) ] = 1 - P[L_sigma > Prx_fit-loss] = 1-0.5*erfc(...) --> see page 56 lecture ntoes
     int n=350;
     QVector<qreal> prob(n);
+    QVector<qreal> margin(n);
     QVector<qreal> dist_vecr(n); //make a distance vector
     QVector<qreal> Fu(n);
     qreal Prx_av, a, b;
     for(int i=0; i<n; i++){
         dist_vecr[i] = i;
         Prx_av = slope*log10(dist_vecr[i]) + intercept;
-        prob[i] = 1 - 0.5 * erfc( (Prx_av - loss)/(sigma*sqrt(2)) );
-        a = (Prx_av - loss)/(sqrt(2)*sigma);
-        qDebug() << "e = " << exp(1);
+        prob[i] = 1 - 0.5 * erfc( (Prx_av - min_Prx)/(sigma*sqrt(2)) );
+        margin[i] = Prx_av - min_Prx;
+        a = (Prx_av - min_Prx)/(sqrt(2)*sigma);
         b = abs(slope)*log10(exp(1))/(sqrt(2)*sigma);
         Fu[i] = 1 - 0.5*erfc(a) + 0.5*exp(2*a/b + 1/pow(b,2))*erfc(a+1/b);
     }
 
+    // set title of plot:
+    ui->probaPlot->plotLayout()->insertRow(0);
+    ui->probaPlot->plotLayout()->addElement(0, 0, new QCPTextElement(ui->probaPlot, "Connection probability", QFont("sans", 12, QFont::Bold)));
+
+    ui->wholeCellPlot->plotLayout()->insertRow(0);
+    ui->wholeCellPlot->plotLayout()->addElement(0, 0, new QCPTextElement(ui->wholeCellPlot, "Whole cell coverage - fade margin", QFont("sans", 12, QFont::Bold)));
+
+    //LEGEND
+    ui->probaPlot->legend->setVisible(true);
+    ui->probaPlot->legend->setFont(QFont("Helvetica",12));
+    // set locale to english, so we get english decimal separator:
+    ui->probaPlot->setLocale(QLocale(QLocale::English, QLocale::UnitedKingdom));
+
     // add data point graph:
     ui->probaPlot->addGraph();
     ui->probaPlot->graph(0)->setPen(QPen(Qt::blue));
+    ui->probaPlot->graph(0)->setName("Probability of connection");
 
     ui->probaPlot->addGraph();
     ui->probaPlot->graph(1)->setPen(QPen(Qt::red));
+    ui->probaPlot->graph(1)->setName("Percentage of covered area Fu");
+
+    ui->wholeCellPlot->addGraph();
+    ui->wholeCellPlot->graph(0)->setPen(QPen(Qt::red));
+    ui->wholeCellPlot->graph(0)->setName("Percentage of covered area Fu");
 
     // pass data to graphs and let QCustomPlot determine the axes ranges so the whole thing is visible:
     ui->probaPlot->graph(0)->setData(dist_vecr,prob);
@@ -629,60 +840,256 @@ void MainWindow::makeCellRangePlot(qreal slope, qreal intercept, qreal sigma){
     ui->probaPlot->graph(1)->setData(dist_vecr,Fu);
     ui->probaPlot->graph(1)->rescaleAxes();
 
+    ui->wholeCellPlot->graph(0)->setData(margin,Fu);
+    ui->wholeCellPlot->graph(0)->rescaleAxes();
+
+    QFont pfont("Newyork",12);
+    pfont.setStyleHint(QFont::SansSerif);
+    pfont.setPointSize(12);
+
+    ui->probaPlot->yAxis2->setVisible(true);
+    ui->probaPlot->xAxis->setLabelFont(pfont);
+    ui->probaPlot->yAxis->setLabelFont(pfont);
+    ui->probaPlot->yAxis2->setLabelFont(pfont);
+
+    ui->probaPlot->yAxis->setLabel("P (blue)");
+    ui->probaPlot->yAxis2->setLabel("Fu (red)");
+    ui->probaPlot->xAxis->setLabel("Distance from base station (m)");
+
+    ui->wholeCellPlot->xAxis->setLabel("Lm - L(R) [dBm]");
+    ui->wholeCellPlot->yAxis->setLabel("Fu");
+    //ui->wholeCellPlot->yAxis->setRange(0,1);
+
     ui->probaPlot->axisRect()->setupFullAxesBox();
 
 }
 
+void MainWindow::makeSpectrumPlot(QVector<qreal> freqs, QVector<qreal> attenuations, qreal speed){
+
+//    QVector<qreal> freq2carrier; //not working great with the x axis values display...
+//    for(int i=0; i< freqs.size(); i++){
+//        freq2carrier.insert(i,freqs[i]+frequency);
+//    }
+
+    qreal den_rice = 0;
+    for(int k=1; k<attenuations.size(); k++){
+        den_rice += pow(attenuations[k],2);
+    }
+
+    qreal rice_factor = pow(attenuations[0],2)/den_rice;
+    qreal omega_m = beta*speed; // max Doppler shift eq. 4.23
+    qreal doppler_spread = omega_m/(2*pi); //in text right above eq. 4.24
+    qreal coherence_time = 0.5*c/(frequency*speed); //eq. 4.25
+
+    qDebug() << "Rice factor K = " << rice_factor;
+    qDebug() << "Max Doppler shift = " << omega_m*2*pi <<"Hz";
+    qDebug() << "Coherence time = " << coherence_time << "s";
+
+    //title
+    ui->spectrumPlot->plotLayout()->insertRow(0);
+    ui->spectrumPlot->plotLayout()->addElement(0, 0, new QCPTextElement(ui->spectrumPlot, "Doppler spectrum", QFont("sans", 12, QFont::Bold)));
+
+    // add data point graph:
+    ui->spectrumPlot->addGraph();
+    ui->spectrumPlot->graph()->setPen(QPen(Qt::blue));
+    ui->spectrumPlot->graph()->setLineStyle(QCPGraph::lsImpulse);
+
+
+    // pass data to graphs and let QCustomPlot determine the axes ranges so the whole thing is visible:
+    ui->spectrumPlot->graph(0)->setData(freqs,attenuations);
+    ui->spectrumPlot->graph(0)->rescaleAxes();
+    //ui->spectrumPlot->xAxis->scaleRange(1.3, ui->spectrumPlot->xAxis->range().center());
+
+    QFont pfont("Newyork",6);
+    pfont.setStyleHint(QFont::SansSerif);
+    pfont.setPointSize(9);
+    ui->spectrumPlot->xAxis->setLabelFont(pfont);
+    ui->spectrumPlot->yAxis->setLabelFont(pfont);
+    ui->spectrumPlot->xAxis->setLabel("Frequency offset from carrier (Hz)");
+    ui->spectrumPlot->yAxis->setLabel("| h |");
+
+    ui->spectrumPlot->setInteraction(QCP::iRangeDrag, true);
+    ui->spectrumPlot->setInteraction(QCP::iRangeZoom, true);
+
+    ui->spectrumPlot->axisRect()->setupFullAxesBox();
+}
+
+void MainWindow:: makeImpulseResponse(QVector<qreal> tau_vec, QVector<complex<qreal>> h_vec){
+
+    QVector<qreal> abs_h;
+    for(int i=0; i<h_vec.size();i++){
+        abs_h.append(abs(h_vec[i]));
+    }
+
+    //titles
+    ui->impulsePlot->plotLayout()->insertRow(0);
+    ui->impulsePlot->plotLayout()->addElement(0, 0, new QCPTextElement(ui->impulsePlot, "Physical vs TDL impulse responses", QFont("sans", 12, QFont::Bold)));
+
+    ui->USimpulsePlot->plotLayout()->insertRow(0);
+    ui->USimpulsePlot->plotLayout()->addElement(0, 0, new QCPTextElement(ui->USimpulsePlot, "Physical vs Uncorrelated scattering TDL impulse responses", QFont("sans", 12, QFont::Bold)));
+
+    //LEGEND
+    ui->impulsePlot->legend->setVisible(true);
+    ui->impulsePlot->legend->setFont(QFont("Helvetica",12));
+    // set locale to english, so we get english decimal separator:
+    ui->impulsePlot->setLocale(QLocale(QLocale::English, QLocale::UnitedKingdom));
+    ////////////////////////////////////////
+    ui->USimpulsePlot->legend->setVisible(true);
+    ui->USimpulsePlot->legend->setFont(QFont("Helvetica",12));
+    // set locale to english, so we get english decimal separator:
+    ui->USimpulsePlot->setLocale(QLocale(QLocale::English, QLocale::UnitedKingdom));
+
+
+    QFont pfont("Newyork",6);
+    pfont.setStyleHint(QFont::SansSerif);
+    pfont.setPointSize(9);
+    ui->impulsePlot->xAxis->setLabelFont(pfont);
+    ui->impulsePlot->yAxis->setLabelFont(pfont);
+    ui->impulsePlot->xAxis->setLabel("Delay (s)");
+    ui->impulsePlot->yAxis->setLabel("| h |");
+    ui->USimpulsePlot->xAxis->setLabelFont(pfont);
+    ui->USimpulsePlot->yAxis->setLabelFont(pfont);
+    ui->USimpulsePlot->xAxis->setLabel("Delay (s)");
+    ui->USimpulsePlot->yAxis->setLabel("| h |");
+
+
+    // add data point graph:
+    ui->impulsePlot->addGraph();
+    ui->impulsePlot->graph()->setPen(QPen(Qt::blue));
+    ui->impulsePlot->graph()->setLineStyle(QCPGraph::lsImpulse);
+    ui->impulsePlot->graph()->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, 5));
+    //////////////////////////// do same for other graph
+    ui->USimpulsePlot->addGraph();
+    ui->USimpulsePlot->graph()->setPen(QPen(Qt::blue));
+    ui->USimpulsePlot->graph()->setLineStyle(QCPGraph::lsImpulse);
+    ui->USimpulsePlot->graph()->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, 5));
+
+    // pass data to graphs and let QCustomPlot determine the axes ranges so the whole thing is visible:
+    ui->impulsePlot->graph(0)->setData(tau_vec, abs_h);
+    ui->impulsePlot->graph(0)->rescaleAxes();
+    ui->impulsePlot->graph(0)->setName("Physical impulse response");
+    //ui->spectrumPlot->xAxis->scaleRange(1.3, ui->spectrumPlot->xAxis->range().center());
+    ////////////////////////////do same for other graph
+    ui->USimpulsePlot->graph(0)->setData(tau_vec, abs_h);
+    ui->USimpulsePlot->graph(0)->rescaleAxes();
+    ui->USimpulsePlot->graph(0)->setName("Physical impulse response");
+
+
+    ui->impulsePlot->setInteraction(QCP::iRangeDrag, true);
+    ui->impulsePlot->setInteraction(QCP::iRangeZoom, true);
+    ///////////
+    ui->USimpulsePlot->setInteraction(QCP::iRangeDrag, true);
+    ui->USimpulsePlot->setInteraction(QCP::iRangeZoom, true);
+
+    ui->impulsePlot->axisRect()->setupFullAxesBox();
+    ui->USimpulsePlot->axisRect()->setupFullAxesBox();
+}
+
+void MainWindow:: makeTDLImpulseResponses(QVector<qreal> tau_vec, QVector<complex<qreal>> alpha_vec){
+
+    //Find tau max
+    qreal tau_max = 0, tau_min=0;
+    for(int i=0;i<tau_vec.size();i++){
+        if(tau_vec[i]>tau_max){
+            tau_max = tau_vec[i];
+        }
+    }
+    tau_min = tau_max;
+    for(int i=0;i<tau_vec.size();i++){
+        if(tau_vec[i]<tau_min){
+            tau_min = tau_vec[i];
+        }
+    }
+
+    qDebug() << "Delay spread = " << tau_max-tau_min << "s";
+    qDebug() << "Coherence bandwidth = " << 1/(tau_max-tau_min) << "Hz";
+
+    // TDL IMPULSE RESPONSE Process data and make two vectors delta_tau_vec and h_TDL to plot equation 1.20 by mean of 1.22
+    QVector<qreal> h_TDL, h_USTDL, delta_tau_vec;
+    qreal B = 200*pow(10,6); //bvandwitdh
+    qreal delta_tau = 1/(2*B);
+    qreal L = ceil(tau_max/delta_tau);
+
+    complex<qreal> h_l = 0, h_l_US=0;
+    qreal x = 0; //will be used for x = 2*B*(taun_n-l*delta_l) of eq 1.22, then sinc(x) = sin(pi*x)/(pi*x)
+    for(int l=1; l <= L; l++){
+        for(int n=0; n<tau_vec.size();n++){
+
+            // h_TDL computations
+            x = 2*B*(tau_vec[n]-l*delta_tau);
+            h_l += alpha_vec[n]*sin(pi*x)/(pi*x);
+
+            // h_USTDL computations
+            if(tau_vec[n] >= delta_tau*(l-1) && tau_vec[n] < delta_tau*l){
+                h_l_US += alpha_vec[n];
+            }
+        }
+
+        h_TDL.append(abs(h_l));
+        h_USTDL.append(abs(h_l_US));
+        delta_tau_vec.append(l*delta_tau);
+        h_l=0; h_l_US=0; //reinit h_l for next step
+    }
+
+    // UNCORRELATED SCATTERING TDL IMPULSE RESP
+
+    // add data point graph for h_TDL:
+    ui->impulsePlot->addGraph();
+    ui->impulsePlot->graph()->setPen(QPen(Qt::red));
+    ui->impulsePlot->graph()->setLineStyle(QCPGraph::lsImpulse);
+    ui->impulsePlot->graph()->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, 5));
+    // add data point graph for h_USTDL:
+    ui->USimpulsePlot->addGraph();
+    ui->USimpulsePlot->graph()->setPen(QPen(Qt::green));
+    ui->USimpulsePlot->graph()->setLineStyle(QCPGraph::lsImpulse);
+    ui->USimpulsePlot->graph()->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, 5));
+
+    // pass data to graphs and let QCustomPlot determine the axes ranges so the whole thing is visible:
+    ui->impulsePlot->graph(1)->setData(delta_tau_vec, h_TDL);
+    ui->impulsePlot->graph(1)->rescaleAxes();
+    ui->impulsePlot->graph(1)->setName("TDL impulse response");
+    //ui->spectrumPlot->xAxis->scaleRange(1.3, ui->spectrumPlot->xAxis->range().center());
+    //// again for us tdl
+    ui->USimpulsePlot->graph(1)->setData(delta_tau_vec, h_USTDL);
+    ui->USimpulsePlot->graph(1)->rescaleAxes();
+    ui->USimpulsePlot->graph(1)->setName("Uncorrelated scattering TDL response");
+    //ui->spectrumPlot->xAxis->scaleRange(1.3, ui->spectrumPlot->xAxis->range().center());
+
+    ui->impulsePlot->setInteraction(QCP::iRangeDrag, true);
+    ui->impulsePlot->setInteraction(QCP::iRangeZoom, true);
+    ui->USimpulsePlot->setInteraction(QCP::iRangeDrag, true);
+    ui->USimpulsePlot->setInteraction(QCP::iRangeZoom, true);
+
+    ui->impulsePlot->axisRect()->setupFullAxesBox();
+    ui->USimpulsePlot->axisRect()->setupFullAxesBox();
+}
 
 QColor color(qreal power){
 
     if( power <= -25 && power > -36){
-        return QColor (255 , qRound((-25-power)/11*255) ,0, 170); //from red to yellow
-    }
-
-    else if( power <= -36 && power > -47){
-        return QColor(255 - qRound(((-36-power)/11)*255), 255,0, 170);    //from yellow to green
-    }
-
-    else if(power <= -47 && power > -58){
-        return QColor(0, 255, qRound(((-47-power)/11)*255), 170) ; //from green to cyan
-    }
-
-    else if(power <= -58 && power > -69){
-        return QColor(0, 255 - ((-58-power)/11)*255, 255, 170) ; //from cyan to blue
-    }
-
-    else if(power <= -69 && power > -80){
-        return QColor(0, 0, 255- ((-69-power)/11)*255, 170) ; //from green to blue
-    }
-    else if(power < -80){
-        return QColor (0,0,0,170); // black if below -95
-    }
-
-    else{
-        return QColor (255,0,0,170); // red if above -25
-    }
-
-        /*if (qRound(power) > -35) {
-            return QColor (255,0,0,200);
+            return QColor (255 , qRound((-25-power)/11*255) ,0, 170); //from red to yellow
         }
-        else if (qRound(power) <= -35 && qRound(power) ){
-            return QColor (255,i*11,0,200);
-        }
-        else if (i>23 && i<=46){
-            return QColor (255 - (i-23)*11,255,0,200);
-        }
-        else if (i>46 && i<=69){
-            return QColor (0,255,(i-46)*11,200);
-        }
-        else if (i>69 && i<=92){
-            return QColor (0,255 - (i-69)*11,255,200);
-        }
-        else if (i>92 && i<=146){
-            return QColor (0,0,255-(i-92)*4,200);
-        }
-        else {
-            return QColor (0,0,0,200);
-        }*/
 
+        else if( power <= -36 && power > -47){
+            return QColor(255 - qRound(((-36-power)/11)*255), 255,0, 170);    //from yellow to green
+        }
+
+        else if(power <= -47 && power > -58){
+            return QColor(0, 255, qRound(((-47-power)/11)*255), 170) ; //from green to cyan
+        }
+
+        else if(power <= -58 && power > -69){
+            return QColor(0, 255 - ((-58-power)/11)*255, 255, 170) ; //from cyan to blue
+        }
+
+        else if(power <= -69 && power > -80){
+            return QColor(0, 0, 255- ((-69-power)/11)*255, 170) ; //from green to blue
+        }
+        else if(power < -80){
+            return QColor (0,0,0,170); // black if below -95
+        }
+
+        else{
+            return QColor (255,0,0,170); // red if above -25
+        }
 }
